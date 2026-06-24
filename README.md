@@ -1,9 +1,3 @@
-Ecco il README aggiornato. Ho rimosso i riferimenti al codice MATLAB "da tradurre" (visto che ora è tutto integrato in Python), ho aggiunto la compatibilità cross-platform (che ti tornerà utilissima se deciderai di far girare lo script dal tuo ambiente WSL) e aggiornato i passaggi di utilizzo e le richieste per i futuri contributori.
-
-Ho usato `naca_aero_suite.py` come nome del file principale, se ne hai scelto un altro ti basterà sostituirlo.
-
----
-
 # NACA Optimization Tool & Aerodynamic Suite
 
 ## 📖 The Project
