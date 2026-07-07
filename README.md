@@ -2,19 +2,19 @@
 
 ## 📖 The Project
 
-This open-source repository contains a unified Python suite for the analysis, inverse design, and optimization of NACA 4-digit airfoils. Originally developed as separate projects, the code has been refactored into a single, modular, and robust tool that combines a viscous flow optimizer (using XFOIL) with an inviscid panel method for detailed aerodynamic analysis.
+This open-source repository contains a unified Python suite for the analysis, inverse design, and optimization of NACA 4-digit airfoils. Originally developed as separate projects, the code has been refactored into a single, modular, and robust tool that combines a viscous flow optimizer (using XFOIL) with a potential panel method for detailed aerodynamic analysis.
 
 ## ✨ Code Refactoring and Improvements
 
 The original `NACA_aero_suite.py` script has been completely refactored into a structured Python package to improve maintainability, readability, and extensibility.
 
 Key improvements include:
-*   **Modular Structure:** The code is now organized into a `naca_aero_suite` package with clear separation of concerns (airfoil generation, XFOIL execution, optimization, panel method, and plotting).
+*   **Modular Structure:** The code is now organized into a `naca_aero_suite` package with clear separation of concerns (airfoil generation, XFOIL execution, optimization, potential panel method, and plotting).
 *   **English Translation:** All code, comments, and user-facing prompts have been translated to English.
 *   **Robust Error Handling:** The XFOIL wrapper now has improved error and timeout handling, preventing silent failures.
 *   **Safe File Management:** The use of temporary directories for analysis files prevents race conditions and ensures that intermediate files are automatically cleaned up.
 *   **Unified Geometry Generation:** A single, consistent function (`naca4_airfoil`) is now used for all airfoil geometry creation.
-*   **New Features:** The suite now automatically saves optimization history to a `.csv` file and can plot the convergence of the optimizer.
+*   **New Features:** The suite now automatically saves optimization history, exports SVG vector plots (airfoil geometry, Cp distribution, Delta Cp lift distribution), generates a complete aerodynamic data CSV, and automatically downloads XFOIL on Windows.
 
 ## 📂 New Code Structure
 
@@ -27,7 +27,7 @@ The project is now organized as follows:
 │   ├── airfoil.py          # Generates NACA 4-digit airfoil coordinates.
 │   ├── xfoil.py            # A robust wrapper for running XFOIL analysis.
 │   ├── optimizer.py        # Manages the SLSQP optimization process.
-│   ├── panel_method.py     # Implements the inviscid panel method.
+│   ├── panel_method.py     # Implements the potential panel method.
 │   └── plotting.py         # Contains all plotting functions.
 ├── run_suite.py            # Main user-facing script to run the application.
 ├── NACA_aero_suite.py      # The original, monolithic script (archived).
@@ -60,7 +60,7 @@ All functionality is now accessed through the `run_suite.py` script.
 
 The script will guide you through a command-line interface:
 
-**Phase 1: Optimization**
+**FASE 1: RICERCA PROFILO (Optimization)**
 You will be prompted to enter the design conditions and aerodynamic targets:
 *   Design speed and chord (to calculate Reynolds and Mach numbers).
 *   Target angle of attack ($\alpha$).
@@ -69,10 +69,13 @@ You will be prompted to enter the design conditions and aerodynamic targets:
 
 The optimizer will then run to find the NACA 4-digit airfoil that best meets these targets.
 
-**Phase 2: Analysis and Visualization**
-Once the optimization is complete, the results (airfoil `.dat` file, optimization history `.csv`) will be saved to a new `Results_*` directory.
+**FASE 2: ANALISI PROFILO (Analysis and Visualization)**
+Once the optimization is complete, the results (airfoil `.dat` file, optimization history `.csv`, and convergence plot `.svg`) will be saved to a new `Results_*` directory.
 
-You will then be prompted to run an advanced analysis on the optimized profile, which includes:
-*   A plot of the optimization history.
-*   A plot of the final airfoil geometry.
-*   An inviscid panel method analysis, with a plot of the pressure coefficient ($C_p$) distribution.
+**FASE 3: ANALISI POTENZIALE E PRESSIONI (Potential Flow Analysis)**
+You will then be prompted to run an advanced potential flow analysis on the optimized profile, which includes:
+*   Global aerodynamic coefficient outputs (XFOIL Viscous Cl/Cd vs Potential Cl).
+*   Vector plot of the airfoil geometry (`.svg`).
+*   Vector plot of the pressure coefficient ($C_p$) distribution (`.svg`).
+*   Vector plot of the lift distribution ($\Delta C_p$) along $x/c$ (`.svg`).
+*   A unified CSV file (`aerodynamic_data_*.csv`) containing the numerical distributions of $C_p$ and $\Delta C_p$ along $x/c$, as well as global $C_L$ and $C_D$ references.
