@@ -43,10 +43,10 @@ Ensure you have **Python 3.8+** installed on your system.
     pip install numpy scipy matplotlib
     ```
 
-2.  **Install XFOIL:**
+2.  **XFOIL Installation:**
     The optimizer depends on the XFOIL executable.
-    *   **Windows:** Place `xfoil.exe` in the root directory of this project.
-    *   **Linux/WSL:** Ensure `xfoil` is installed and accessible from your system's PATH, or place the executable in the project's root directory.
+    *   **Windows:** The suite will automatically download and install `xfoil.exe` for you during the first run! No manual action is required.
+    *   **Linux/WSL:** Ensure `xfoil` is installed and accessible from your system's PATH (e.g., `sudo apt-get install xfoil`), or manually place the executable in the project's root directory.
 
 ## 🚀 How to Run
 

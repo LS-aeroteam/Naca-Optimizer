@@ -75,6 +75,4 @@ def save_airfoil_coordinates(X, Y, filename):
     """
     with open(filename, "w") as f:
         for i in range(len(X)):
-            f.write(f"{X[i]:.6f} {Y[i]:.6f}
-")
-
+            f.write(f"{X[i]:.6f} {Y[i]:.6f}")

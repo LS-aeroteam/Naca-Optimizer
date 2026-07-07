@@ -1,8 +1,8 @@
 import numpy as np
 import math
 
-def _cosd(deg): return math.cos(math.radians(deg))
-def _sind(deg): return math.sin(math.radians(deg))
+def _cosd(deg): return np.cos(np.radians(deg))
+def _sind(deg): return np.sin(np.radians(deg))
 def _atan2d(y, x): 
     res = math.degrees(math.atan2(y, x))
     return res if res >= 0 else res + 360
@@ -63,7 +63,7 @@ def _calculate_influence_coefficients(XC, YC, XB, YB, PSI, S):
             I[i, j] = term1_i + term2_i
             
             Ct_s = -_cosd(PSI[i]-PSI[j])
-            Dt_s = (XC[i]-XB[j])*_cosd(PSI[i]) + (YC[i]-YB[j])*_cosd(PSI[i])
+            Dt_s = (XC[i]-XB[j])*_cosd(PSI[i]) + (YC[i]-YB[j])*_sind(PSI[i])
 
             term1_j = 0.5 * Ct_s * math.log((S[j]**2 + 2*A*S[j] + B) / B)
             term2_j = ((Dt_s - A*Ct_s) / E) * (math.atan2(S[j]+A, E) - math.atan2(A, E)) if E != 0 else 0
@@ -113,16 +113,21 @@ def run_panel_analysis(XB, YB, alpha_deg):
     Runs a complete panel method analysis for a given airfoil geometry and angle of attack.
 
     Args:
-        XB (np.ndarray): Airfoil X-coordinates (clockwise, starting/ending at trailing edge).
+        XB (np.ndarray): Airfoil X-coordinates (expected to be TE -> LE -> TE).
         YB (np.ndarray): Airfoil Y-coordinates.
         alpha_deg (float): Angle of attack in degrees.
 
     Returns:
         dict: A dictionary containing the results:
-              'CL_inviscid' (float), 'Cp' (np.ndarray), 'XC' (np.ndarray), 'YC' (np.ndarray).
+              'cl_potential' (float), 'Cp' (np.ndarray), 'XC' (np.ndarray), 'YC' (np.ndarray).
     """
-    print("
-[+] Starting Panel Method Simulation (Sources + Vortices)...")
+    # Enforce clockwise order for the panel method calculations
+    # naca4_airfoil returns counter-clockwise (TE -> Upper -> LE -> Lower -> TE)
+    # We reverse it to be TE -> Lower -> LE -> Upper -> TE (Clockwise)
+    XB = XB[::-1]
+    YB = YB[::-1]
+    
+    print("\n[+] Starting Panel Method Simulation (Sources + Vortices)...")
     
     # 1. Calculate geometry parameters
     XC, YC, S, PSI = _calculate_geometry_parameters(XB, YB)
@@ -139,12 +144,12 @@ def run_panel_analysis(XB, YB, alpha_deg):
     # 5. Calculate total lift coefficient
     perimeter = np.sum(S)
     gamma_total = gamma * perimeter
-    cl_inviscid = -2 * gamma_total  # Based on Kutta-Joukowski theorem L = -rho*V*Gamma
+    cl_potential = -2 * gamma_total  # Based on Kutta-Joukowski theorem L = -rho*V*Gamma
     
-    print(f"    Inviscid Lift Coefficient (CL): {cl_inviscid:.4f}")
+    print(f"    Potential Lift Coefficient (CL): {cl_potential:.4f}")
     
     return {
-        'cl_inviscid': cl_inviscid,
+        'cl_potential': cl_potential,
         'Cp': Cp,
         'XC': XC,
         'YC': YC,

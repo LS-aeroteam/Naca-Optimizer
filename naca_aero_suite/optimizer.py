@@ -94,8 +94,7 @@ class NacaOptimizer:
         Returns:
             scipy.optimize.OptimizeResult: The result object from scipy.minimize.
         """
-        print("
-[+] Starting XFOIL-based Airfoil Optimization...")
+        print("[+] Starting XFOIL-based Airfoil Optimization...")
         print("-" * 70)
         print(f"| {'Eval':^4} | {'m':^6} | {'p':^6} | {'t':^6} | {'Cl':^9} | {'Cd':^9} | {'Score':^10} |")
         print("-" * 70)

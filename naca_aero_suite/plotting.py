@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_airfoil_geometry(X, Y, title="Airfoil Geometry"):
+def plot_airfoil_geometry(X, Y, title="Airfoil Geometry", **kwargs):
     """
     Plots the geometry of the airfoil.
 
@@ -17,9 +17,11 @@ def plot_airfoil_geometry(X, Y, title="Airfoil Geometry"):
     plt.ylabel('y/c')
     plt.axis('equal')
     plt.grid(True)
-    plt.show()
+    if 'save_path' in kwargs:
+        plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
+    plt.close()
 
-def plot_pressure_coefficient(panel_results, alpha_deg, naca_name=""):
+def plot_pressure_coefficient(panel_results, alpha_deg, naca_name="", **kwargs):
     """
     Plots the pressure coefficient (Cp) distribution over the airfoil.
 
@@ -45,14 +47,51 @@ def plot_pressure_coefficient(panel_results, alpha_deg, naca_name=""):
     plt.gca().invert_yaxis()
     plt.xlabel('x/c')
     plt.ylabel('$C_p$')
-    title = f'Pressure Coefficient Distribution for {naca_name}
-$\alpha$ = {alpha_deg}° (Panel Method)'
+    title = rf'Pressure Coefficient Distribution for {naca_name} $\alpha$ = {alpha_deg}° (Potential Analysis)'
     plt.title(title, fontsize=14)
     plt.grid(True)
     plt.legend()
-    plt.show()
+    if 'save_path' in kwargs:
+        plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
+    plt.close()
 
-def plot_optimization_history(history):
+def plot_lift_distribution(panel_results, alpha_deg, naca_name="", **kwargs):
+    """
+    Plots the lift distribution (Delta Cp) over the airfoil.
+
+    Args:
+        panel_results (dict): The results dictionary from `run_panel_analysis`.
+        alpha_deg (float): The angle of attack for the title.
+        naca_name (str): Optional name of the airfoil for the title.
+    """
+    Cp = panel_results['Cp']
+    XC = panel_results['XC']
+    num_panels = panel_results['num_panels']
+    n_half = int(num_panels / 2)
+
+    x_lower = XC[:n_half]
+    cp_lower = Cp[:n_half]
+    x_upper = XC[n_half:]
+    cp_upper = Cp[n_half:]
+
+    # x_upper goes from LE to TE. x_lower goes from TE to LE. 
+    # Reverse lower to align with upper.
+    x_aligned = x_upper
+    delta_cp = cp_lower[::-1] - cp_upper
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(x_aligned, delta_cp, 'g-o', markersize=3, linewidth=1.5, label=r'$\Delta C_p$ (Lift Distribution)')
+    plt.xlabel('x/c')
+    plt.ylabel(r'$\Delta C_p = C_{p,lower} - C_{p,upper}$')
+    title = rf'Lift Distribution for {naca_name} $\alpha$ = {alpha_deg}° (Potential Analysis)'
+    plt.title(title, fontsize=14)
+    plt.grid(True)
+    plt.legend()
+    if 'save_path' in kwargs:
+        plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
+    plt.close()
+
+def plot_optimization_history(history, **kwargs):
     """
     Plots the evolution of parameters and score during optimization.
 
@@ -64,7 +103,8 @@ def plot_optimization_history(history):
         print("History is empty, cannot generate plot.")
         return
 
-    history_np = np.array([row for row in history if "ailed" not in row and "ounds" not in row], dtype=float)
+    # Filter out rows with non-numeric data (e.g., 'Failed', 'Bounds') and convert to numpy array
+    history_np = np.array([row for row in history if isinstance(row[4], (int, float))], dtype=float)
     if history_np.shape[0] == 0:
         print("No successful evaluations in history, cannot generate plot.")
         return
@@ -95,4 +135,6 @@ def plot_optimization_history(history):
     ax2.legend()
     
     plt.tight_layout()
-    plt.show()
+    if 'save_path' in kwargs:
+        plt.savefig(kwargs['save_path'], format='png', bbox_inches='tight')
+    plt.close()
