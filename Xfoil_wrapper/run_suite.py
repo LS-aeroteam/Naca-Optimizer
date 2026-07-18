@@ -104,9 +104,11 @@ def main():
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
     print(f"\n[+] OPTIMIZATION COMPLETE. Best profile found: NACA {naca_opt_str}")
 
-    results_dir = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
+    results_dir = os.path.join(base_dir, results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
-    print(f"[i] Saving results to '{results_dir}/'")
+    print(f"[i] Saving results to '{results_dir_name}/'")
 
     # Save optimized airfoil coordinates
     X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)

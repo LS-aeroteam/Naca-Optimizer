@@ -108,7 +108,7 @@ def _calculate_surface_velocities(lambda_src, gamma, J, L, PSI, alpha_deg):
     Cp = 1 - (Vt**2)
     return Vt, Cp
 
-def run_panel_analysis(XB, YB, alpha_deg):
+def run_panel_analysis(XB, YB, alpha_deg, verbose=True):
     """
     Runs a complete panel method analysis for a given airfoil geometry and angle of attack.
 
@@ -116,6 +116,7 @@ def run_panel_analysis(XB, YB, alpha_deg):
         XB (np.ndarray): Airfoil X-coordinates (expected to be TE -> LE -> TE).
         YB (np.ndarray): Airfoil Y-coordinates.
         alpha_deg (float): Angle of attack in degrees.
+        verbose (bool): Whether to print output.
 
     Returns:
         dict: A dictionary containing the results:
@@ -127,7 +128,8 @@ def run_panel_analysis(XB, YB, alpha_deg):
     XB = XB[::-1]
     YB = YB[::-1]
     
-    print("\n[+] Starting Panel Method Simulation (Sources + Vortices)...")
+    if verbose:
+        print("\n[+] Starting Panel Method Simulation (Sources + Vortices)...")
     
     # 1. Calculate geometry parameters
     XC, YC, S, PSI = _calculate_geometry_parameters(XB, YB)
@@ -146,7 +148,8 @@ def run_panel_analysis(XB, YB, alpha_deg):
     gamma_total = gamma * perimeter
     cl_potential = -2 * gamma_total  # Based on Kutta-Joukowski theorem L = -rho*V*Gamma
     
-    print(f"    Potential Lift Coefficient (CL): {cl_potential:.4f}")
+    if verbose:
+        print(f"    Potential Lift Coefficient (CL): {cl_potential:.4f}")
     
     return {
         'cl_potential': cl_potential,
