@@ -11,3 +11,13 @@ Run the validation script from the terminal:
 ```bash
 python run_validation.py
 ```
+
+### Interactive Setup
+The script is fully parameterized and interactive. Upon launch, it will prompt you for:
+- Operating fluid, design speed, and chord length (which it uses to mathematically calculate the exact Reynolds and Mach numbers).
+- The minimum, maximum, and step values for the Angle of Attack (Alpha) sweep.
+- The panel density.
+
+### Outputs
+Once the comparative sweeps are completed, the script generates comparative lift coefficient plots (SVG) and raw data matrices (CSV) to help you visualize the potential flow vs viscous flow discrepancies.
+To keep the main directory tidy, all validation exports are saved in a categorized subfolder inside the `Results/` directory (e.g., `Results/Validation_Re..._Mach.../`).

@@ -12,4 +12,9 @@ Simply run the main script from the terminal:
 ```bash
 python run.py
 ```
-You will be prompted for a few straightforward parameters (fluid, speed, chord, target Cl, and maximum thickness). The software will run automatically, display the results in the terminal, and save the coordinates, vector plots, and textual data (CSV) in a dedicated folder.
+Upon launching, the pre-run checks will verify your environment and **automatically download and install** any missing Python dependencies (like `numpy`, `scipy`, or `matplotlib`) in the background.
+
+You will be prompted for a few straightforward parameters (fluid, speed, chord, target angle of attack, target Cl, and maximum thickness constraint). The software will run automatically without interruptions, displaying the optimization progress directly in the terminal.
+
+### Outputs
+To keep your workspace clean, all outputs are isolated. The generated airfoil coordinates, pressure vector plots, and detailed textual data (CSV) are automatically saved into a categorized subfolder within a dedicated `Results/` directory.

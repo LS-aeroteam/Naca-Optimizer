@@ -10,4 +10,10 @@ Make sure you are in this folder and run the main script:
 ```bash
 python run.py
 ```
-If the program does not find the XFOIL executable on your system, it will attempt to download it automatically and prepare it for use (currently supported on Windows). By following the on-screen instructions, you can set your parameters and start the viscous optimization.
+
+### Pre-Run Automation
+If the program does not find the XFOIL executable on your system, it will attempt to download it automatically and prepare it for use (currently supported on Windows). Additionally, it will **automatically install** any missing Python libraries without prompting.
+
+### Workflow
+By following the on-screen instructions, you can set your parameters and start the viscous optimization. The input prompts have been unified with the In-House solver for a seamless experience. 
+Once launched, the process runs from start to finish without pausing for confirmations. All final aerodynamic plots, XFOIL polars, and best-candidate geometries are neatly exported into a categorized subfolder inside the `Results/` directory.
