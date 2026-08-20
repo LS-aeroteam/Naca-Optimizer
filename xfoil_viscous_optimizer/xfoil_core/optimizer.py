@@ -13,7 +13,7 @@ class NacaOptimizer:
     Optimizes a NACA 4-digit airfoil to meet specific aerodynamic targets.
     """
 
-    def __init__(self, reynolds, alpha, target_cl, max_cd, mach=0.0, ncrit=9.0, chord=1.0, max_height=None):
+    def __init__(self, reynolds, alpha, target_cl, max_cd, mach=0.0, ncrit=9.0, chord=1.0, max_height_box=None):
         self.reynolds = reynolds
         self.alpha = alpha
         self.target_cl = target_cl
@@ -21,7 +21,7 @@ class NacaOptimizer:
         self.mach = mach
         self.ncrit = ncrit
         self.chord = chord
-        self.max_height = max_height
+        self.max_height_box = max_height_box
         
         self.eval_count = 0
         self.history = []
@@ -49,10 +49,10 @@ class NacaOptimizer:
         X, Y, _ = naca4_airfoil(m, p, t)
         
         # Check geometric box constraint
-        if self.max_height is not None:
+        if self.max_height_box is not None:
             physical_height = (np.max(Y) - np.min(Y)) * self.chord
-            if physical_height > self.max_height:
-                height_penalty = ((physical_height - self.max_height) * 1000) ** 2
+            if physical_height > self.max_height_box:
+                height_penalty = ((physical_height - self.max_height_box) * 1000) ** 2
                 score = self.FAILURE_PENALTY + height_penalty
                 print(f"| {self.eval_count:4d} | {m:.4f} | {p:.4f} | {t:.4f} | {'Box Fail':^9} | {'Box Fail':^9} | {score:.4e} |")
                 self.history.append([self.eval_count, m, p, t, "Box Fail", "Box Fail", score])
@@ -120,7 +120,7 @@ class NacaOptimizer:
             initial_guess,
             method='SLSQP',
             bounds=bounds,
-            options={'disp': True, 'maxiter': max_iter, 'ftol': 1e-4, 'eps': 1e-4}
+            options={'disp': False, 'maxiter': max_iter, 'ftol': 1e-4, 'eps': 1e-4}
         )
         
         print("-" * 70)

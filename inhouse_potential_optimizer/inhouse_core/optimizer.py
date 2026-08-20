@@ -118,7 +118,7 @@ class NacaOptimizer:
             best_guess,
             method='SLSQP',
             bounds=bounds,
-            options={'disp': True, 'maxiter': max_iter, 'ftol': 1e-4, 'eps': 1e-4}
+            options={'disp': False, 'maxiter': max_iter, 'ftol': 1e-4, 'eps': 1e-4}
         )
         
         print("-" * 70)

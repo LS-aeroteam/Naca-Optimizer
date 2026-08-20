@@ -17,14 +17,17 @@ def get_fluid_selection():
         '1': {'name': 'Air (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
         '2': {'name': 'Water (20 degrees)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
     }
+    
     while True:
         print("\nSelect the operating fluid:")
         print("1. Air (Kinematic viscosity: 1.46e-5 m^2/s, Speed of sound: 340.3 m/s)")
         print("2. Water (Kinematic viscosity: 1.00e-6 m^2/s, Speed of sound: 1482.0 m/s)")
-        choice = input("Choice (1 or 2) [default: 1]: ").strip() or '1'
+        choice = input("Choice (1 or 2) [default: 1]: ").strip()
+        if not choice:
+            return fluids['1']
         if choice in fluids:
             return fluids[choice]
-        print("[!] Error: invalid selection.")
+        print("Error: invalid selection.")
 
 def get_user_input():
     """Gets all necessary inputs from the user."""
@@ -33,33 +36,28 @@ def get_user_input():
     print("======================================================================")
     
     fluid = get_fluid_selection()
+    fluid_viscosity = fluid['viscosity']
+    speed_of_sound = fluid['speed_of_sound']
     
     try:
-        speed = float(input("\nEnter design speed (m/s) [e.g., 50]: ") or 50)
+        speed = float(input("Enter design speed (m/s) [e.g., 50]: ") or 50)
+        chord = float(input("Enter airfoil chord (m) [e.g., 1.0]: ") or 1.0)
         
-        # Bounding box constraints
-        print("\n--- Bounding Box Constraints ---")
-        max_length = float(input("Enter maximum physical length (L_max) in meters [e.g., 1.0]: ") or 1.0)
-        max_height = float(input("Enter maximum physical height (H_max) in meters [e.g., 0.2]: ") or 0.2)
-        
-        chord = float(input(f"Enter airfoil chord (m) (must be <= {max_length}) [e.g., {max_length}]: ") or max_length)
-        if chord > max_length:
-            print(f"[!] Warning: chord {chord} exceeds max length {max_length}. Constraining chord to {max_length}.")
-            chord = max_length
-            
-        target_reynolds = (speed * chord) / fluid['viscosity']
-        target_mach = speed / fluid['speed_of_sound']
-        
-        print(f"\n [i] Calculated Conditions ({fluid['name']}):")
+        target_reynolds = (speed * chord) / fluid_viscosity
+        target_mach = speed / speed_of_sound
+        print(f"\n [i] Calculated Conditions:")
         print(f"    - Reynolds Number: {target_reynolds:,.0f}")
         print(f"    - Mach Number: {target_mach:.3f}")
-        print(f"    - Max Allowed Profile Height: {max_height} m")
 
         target_alpha = float(input("\nEnter target angle of attack (degrees) [e.g., 4.0]: ") or 4.0)
         target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
         max_cd = float(input("Enter maximum tolerable drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
         
-        return target_reynolds, target_mach, target_alpha, target_cl, max_cd, chord, max_height
+        max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
+        num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
+        
+        return target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels
+
     except ValueError:
         print("\n[!] Invalid input. Please enter numerical values.")
         return None
@@ -74,7 +72,7 @@ def main():
     if inputs is None:
         sys.exit(1)
 
-    target_reynolds, target_mach, target_alpha, target_cl, max_cd, chord, max_height = inputs
+    target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels = inputs
     
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print("\n======================================================================")
@@ -90,7 +88,7 @@ def main():
         max_cd=max_cd,
         mach=target_mach,
         chord=chord,
-        max_height=max_height
+        max_height_box=max_height_box
     )
 
     result = optimizer.optimize(initial_guess, bounds, max_iter=50)
@@ -102,13 +100,13 @@ def main():
     # --- Process and Save Optimization Results ---
     opt_m, opt_p, opt_t = result.x
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
-    print(f"\n[+] OPTIMIZATION COMPLETE. Best profile found: NACA {naca_opt_str}")
+    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
-    results_dir = os.path.join(base_dir, results_dir_name)
+    results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
-    print(f"[i] Saving results to '{results_dir_name}/'")
+    print(f"[i] Saving results to 'Results/{results_dir_name}/'")
 
     # Save optimized airfoil coordinates
     X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
@@ -132,9 +130,7 @@ def main():
     print("           PHASE 2: AIRFOIL ANALYSIS")
     print("======================================================================")
     
-    run_post = input("Run advanced analysis and generate plots? (y/n): ")
-    if run_post.lower().strip() != 'y':
-        return
+    print("\n[+] Generating plots and extracting final aerodynamic data...")
 
     # 1. Plot airfoil geometry
     airfoil_plot_filename = os.path.join(results_dir, f"geometry_NACA_{naca_opt_str}.svg")
@@ -145,8 +141,6 @@ def main():
     print("            PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     print("======================================================================")
     try:
-        num_panels = int(input("Enter number of panels for analysis [e.g., 160]: ") or 160)
-        
         # Regenerate airfoil with panel-specific points if needed
         X_panel, Y_panel, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
         

@@ -11,7 +11,7 @@ from xfoil_core.panel_method import run_panel_analysis
 from xfoil_core.xfoil import XFoilAnalysis
 from xfoil_core.pre_run_checks import perform_all_checks
 
-def plot_validation_results(results_dict, alphas):
+def plot_validation_results(results_dict, alphas, results_subfolder):
     """Generates comparative Cl vs Alpha plots."""
     plt.figure(figsize=(10, 6))
     
@@ -37,10 +37,54 @@ def plot_validation_results(results_dict, alphas):
     plt.grid(True)
     plt.legend()
     
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    plot_filename = os.path.join(base_dir, "validation_plot_cl.svg")
+    os.makedirs(results_subfolder, exist_ok=True)
+    plot_filename = os.path.join(results_subfolder, "validation_plot_cl.svg")
     plt.savefig(plot_filename)
     print(f"[i] Plot saved to: {plot_filename}")
+
+def get_fluid_selection():
+    fluids = {
+        '1': {'name': 'Air (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
+        '2': {'name': 'Water (20 degrees)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
+    }
+    while True:
+        print("\nSelect the operating fluid:")
+        print("1. Air (Kinematic viscosity: 1.46e-5 m^2/s, Speed of sound: 340.3 m/s)")
+        print("2. Water (Kinematic viscosity: 1.00e-6 m^2/s, Speed of sound: 1482.0 m/s)")
+        choice = input("Choice (1 or 2) [default: 1]: ").strip()
+        if not choice:
+            return fluids['1']
+        if choice in fluids:
+            return fluids[choice]
+        print("Error: invalid selection.")
+
+def get_user_input():
+    print("\n======================================================================")
+    print("                SETUP FOR VALIDATION")
+    print("======================================================================")
+    
+    fluid = get_fluid_selection()
+    
+    try:
+        alpha_min = float(input("\nEnter minimum alpha (degrees) [default: -4]: ") or -4)
+        alpha_max = float(input("Enter maximum alpha (degrees) [default: 10]: ") or 10)
+        alpha_step = float(input("Enter alpha step (degrees) [default: 2]: ") or 2)
+        alphas = np.arange(alpha_min, alpha_max + (alpha_step/2), alpha_step)
+        
+        speed = float(input("Enter design speed (m/s) [e.g., 50]: ") or 50)
+        chord = float(input("Enter airfoil chord (m) [e.g., 1.0]: ") or 1.0)
+        
+        reynolds = (speed * chord) / fluid['viscosity']
+        mach = speed / fluid['speed_of_sound']
+        print(f"\n [i] Calculated Conditions:")
+        print(f"    - Reynolds Number: {reynolds:,.0f}")
+        print(f"    - Mach Number: {mach:.3f}")
+
+        num_points = int(input("Enter number of points/panels [default: 160]: ") or 160)
+        return alphas, reynolds, mach, num_points
+    except ValueError:
+        print("\n[!] Invalid input. Using default values.")
+        return np.arange(-4, 12, 2), 1e6, 0.0, 160
 
 def main():
     print("=========================================================")
@@ -50,6 +94,8 @@ def main():
     # Run preliminary checks (ensures XFOIL is present)
     perform_all_checks()
 
+    alphas, reynolds, mach, num_points = get_user_input()
+
     # TEST MATRIX
     # We test some common NACA profiles: symmetric, mildly cambered, and highly cambered
     profiles = [
@@ -57,14 +103,6 @@ def main():
         (0.02, 0.4, 0.12, "2412"), # Standard cambered
         (0.04, 0.4, 0.12, "4412")  # Highly cambered
     ]
-    
-    # Range of angles of attack
-    alphas = np.arange(-4, 12, 2)  # -4, -2, 0, 2, 4, 6, 8, 10
-    
-    # Flow conditions for XFOIL
-    reynolds = 1e6
-    mach = 0.0
-    num_points = 160 # Number of points/panels
     
     # Lists and dictionaries to collect data
     all_results = []
@@ -84,7 +122,7 @@ def main():
         xfoil_analyzer = XFoilAnalysis(airfoil_name=f"naca_{name}", alpha=0.0, reynolds=reynolds, mach=mach)
         
         for alpha in alphas:
-            print(f"  > Alpha = {alpha:2d} deg ...", end=" ", flush=True)
+            print(f"  > Alpha = {alpha:4.1f} deg ...", end=" ", flush=True)
             
             # --- In-House Solver (Panel Method) ---
             # run_panel_analysis in the Xfoil wrapper does not support verbose=False, will print to screen
@@ -125,7 +163,10 @@ def main():
 
     # --- Save CSV ---
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_file = os.path.join(base_dir, "validation_results.csv")
+    results_subfolder_name = f"Validation_Re{int(reynolds)}_Mach{mach:.3f}"
+    results_subfolder = os.path.join(base_dir, "Results", results_subfolder_name)
+    os.makedirs(results_subfolder, exist_ok=True)
+    csv_file = os.path.join(results_subfolder, "validation_results.csv")
     print(f"\n[+] Saving test results to '{csv_file}'...")
     with open(csv_file, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['Profile', 'Alpha', 'Cl_InHouse', 'Cl_Xfoil', 'Error_Cl_%'])
@@ -134,7 +175,7 @@ def main():
         
     # --- Plot Generation ---
     print(f"[+] Generating comparative plots...")
-    plot_validation_results(plot_data, alphas)
+    plot_validation_results(plot_data, alphas, results_subfolder)
         
     print("\n[+] Validation completed successfully!")
 

@@ -20,20 +20,26 @@ def check_python_libraries():
         "matplotlib": "for plotting results"
     }
     
-    missing_count = 0
+    missing_libs = []
     for lib, reason in required_libraries.items():
         try:
             __import__(lib)
             print(f"    - {lib}: Found.")
         except ImportError:
             print(f"    - {lib}: NOT FOUND. This library is required {reason}.")
-            missing_count += 1
+            missing_libs.append(lib)
             
-    if missing_count > 0:
-        print("\n[!] Please install the missing libraries to proceed.")
-        print(f"    You can install them by running: pip install numpy scipy matplotlib")
-        sys.exit(1) # Exit the program
-    print("    All Python libraries are installed.\n")
+    if missing_libs:
+        print("\n[i] Missing libraries detected. Attempting to install them automatically...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_libs)
+            print("    [+] Successfully installed missing libraries.\n")
+        except subprocess.CalledProcessError as e:
+            print(f"\n[!] Failed to install libraries automatically. Error: {e}")
+            print(f"    Please install manually: pip install {' '.join(missing_libs)}")
+            sys.exit(1)
+    else:
+        print("    All Python libraries are installed.\n")
 
 # --- XFOIL Executable Check ---
 

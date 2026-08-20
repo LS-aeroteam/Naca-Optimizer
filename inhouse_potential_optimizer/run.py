@@ -92,19 +92,19 @@ def main():
     result = optimizer.optimize(initial_guess, bounds, max_iter=50)
 
     if not result.success and result.nfev == 0:
-        print("\n[!] Optimization failed to start. Please check your XFOIL setup and input parameters.")
+        print("\n[!] Optimization failed to start. Please check your In-House setup and input parameters.")
         return
         
     # --- Process and Save Optimization Results ---
     opt_m, opt_p, opt_t = result.x
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
-    print(f"\n[+] OPTIMIZATION COMPLETE. Best profile found: NACA {naca_opt_str}")
+    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
-    results_dir = os.path.join(base_dir, results_dir_name)
+    results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
-    print(f"[i] Saving results to '{results_dir_name}/'")
+    print(f"[i] Saving results to 'Results/{results_dir_name}/'")
 
     # Save optimized airfoil coordinates
     X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
