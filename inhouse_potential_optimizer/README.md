@@ -1,4 +1,4 @@
-# In-House Solver
+# In-House Potential Optimizer
 
 This module represents the mathematical core of the project. The script performs aerodynamic optimization using a **Source-Vortex Panel Method** originally developed in MATLAB and ported here to Python to achieve extremely high performance.
 
@@ -10,6 +10,6 @@ This module represents the mathematical core of the project. The script performs
 ## Usage
 Simply run the main script from the terminal:
 ```bash
-python run_suite.py
+python run.py
 ```
 You will be prompted for a few straightforward parameters (fluid, speed, chord, target Cl, and maximum thickness). The software will run automatically, display the results in the terminal, and save the coordinates, vector plots, and textual data (CSV) in a dedicated folder.

@@ -1,11 +1,11 @@
 import os
 import csv
 import sys
-from naca_aero_suite.pre_run_checks import perform_all_checks
-from naca_aero_suite.optimizer import NacaOptimizer
-from naca_aero_suite.airfoil import naca4_airfoil, save_airfoil_coordinates
-from naca_aero_suite.panel_method import run_panel_analysis
-from naca_aero_suite.plotting import (
+from xfoil_core.pre_run_checks import perform_all_checks
+from xfoil_core.optimizer import NacaOptimizer
+from xfoil_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+from xfoil_core.panel_method import run_panel_analysis
+from xfoil_core.plotting import (
     plot_airfoil_geometry, 
     plot_pressure_coefficient, 
     plot_lift_distribution,
@@ -14,17 +14,17 @@ from naca_aero_suite.plotting import (
 
 def get_fluid_selection():
     fluids = {
-        '1': {'name': 'Aria (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
-        '2': {'name': 'Acqua (20°C)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
+        '1': {'name': 'Air (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
+        '2': {'name': 'Water (20 degrees)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
     }
     while True:
-        print("\nSeleziona il fluido operativo:")
-        print("1. Aria (Viscosità cinematica: 1.46e-5 m^2/s, Velocità del suono: 340.3 m/s)")
-        print("2. Acqua (Viscosità cinematica: 1.00e-6 m^2/s, Velocità del suono: 1482.0 m/s)")
-        choice = input("Scelta (1 o 2) [default: 1]: ").strip() or '1'
+        print("\nSelect the operating fluid:")
+        print("1. Air (Kinematic viscosity: 1.46e-5 m^2/s, Speed of sound: 340.3 m/s)")
+        print("2. Water (Kinematic viscosity: 1.00e-6 m^2/s, Speed of sound: 1482.0 m/s)")
+        choice = input("Choice (1 or 2) [default: 1]: ").strip() or '1'
         if choice in fluids:
             return fluids[choice]
-        print("[!] Errore: selezione non valida.")
+        print("[!] Error: invalid selection.")
 
 def get_user_input():
     """Gets all necessary inputs from the user."""
@@ -76,9 +76,9 @@ def main():
 
     target_reynolds, target_mach, target_alpha, target_cl, max_cd, chord, max_height = inputs
     
-    # --- FASE 1: RICERCA PROFILO ---
+    # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print("\n======================================================================")
-    print("                FASE 1: RICERCA PROFILO")
+    print("                PHASE 1: AIRFOIL OPTIMIZATION")
     print("======================================================================")
     initial_guess = [0.02, 0.4, 0.12]  # Start with a NACA 2412
     bounds = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)] # Sensible bounds for NACA 4-digits
@@ -127,9 +127,9 @@ def main():
     history_plot_filename = os.path.join(results_dir, "optimization_history.svg")
     plot_optimization_history(history, save_path=history_plot_filename)
     
-    # --- FASE 2: ANALISI PROFILO ---
+    # --- PHASE 2: AIRFOIL ANALYSIS ---
     print("\n======================================================================")
-    print("           FASE 2: ANALISI PROFILO")
+    print("           PHASE 2: AIRFOIL ANALYSIS")
     print("======================================================================")
     
     run_post = input("Run advanced analysis and generate plots? (y/n): ")
@@ -140,9 +140,9 @@ def main():
     airfoil_plot_filename = os.path.join(results_dir, f"geometry_NACA_{naca_opt_str}.svg")
     plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: NACA {naca_opt_str}", save_path=airfoil_plot_filename)
     
-    # --- FASE 3: ANALISI POTENZIALE E PRESSIONI ---
+    # --- PHASE 3: POTENTIAL & PRESSURE ANALYSIS ---
     print("\n======================================================================")
-    print("            FASE 3: ANALISI POTENZIALE E PRESSIONI")
+    print("            PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     print("======================================================================")
     try:
         num_panels = int(input("Enter number of panels for analysis [e.g., 160]: ") or 160)
@@ -157,7 +157,7 @@ def main():
         final_cl = final_opt_perf[4] if final_opt_perf else None
         final_cd = final_opt_perf[5] if final_opt_perf else None
 
-        print("\n--- Risultati Globali ---")
+        print("\n--- Global Results ---")
         if final_cl is not None and final_cd is not None:
             print(f"XFOIL Viscous Cl: {final_cl:.4f}")
             print(f"XFOIL Viscous Cd: {final_cd:.5f}")

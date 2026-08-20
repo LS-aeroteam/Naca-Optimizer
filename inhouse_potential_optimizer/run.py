@@ -1,11 +1,11 @@
 import os
 import csv
 import sys
-from naca_aero_suite.pre_run_checks import perform_all_checks
-from naca_aero_suite.optimizer import NacaOptimizer
-from naca_aero_suite.airfoil import naca4_airfoil, save_airfoil_coordinates
-from naca_aero_suite.panel_method import run_panel_analysis
-from naca_aero_suite.plotting import (
+from inhouse_core.pre_run_checks import perform_all_checks
+from inhouse_core.optimizer import NacaOptimizer
+from inhouse_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+from inhouse_core.panel_method import run_panel_analysis
+from inhouse_core.plotting import (
     plot_airfoil_geometry, 
     plot_pressure_coefficient, 
     plot_lift_distribution,
@@ -73,9 +73,9 @@ def main():
 
     target_reynolds, target_alpha, target_cl, max_height_box, chord, num_panels = inputs
     
-    # --- FASE 1: RICERCA PROFILO ---
+    # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print("\n======================================================================")
-    print("                FASE 1: RICERCA PROFILO")
+    print("                PHASE 1: AIRFOIL OPTIMIZATION")
     print("======================================================================")
     initial_guess = [0.02, 0.4, 0.12]  # Start with a NACA 2412
     bounds = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)] # Sensible bounds for NACA 4-digits
@@ -135,7 +135,7 @@ def main():
         
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
         
-        print("\n--- Risultati Globali ---")
+        print("\n--- Global Results ---")
         print(f"Potential Cl: {panel_results['cl_potential']:.4f}")
         print("-------------------------\n")
 
