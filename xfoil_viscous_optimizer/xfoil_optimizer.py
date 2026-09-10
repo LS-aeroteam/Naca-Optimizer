@@ -2,8 +2,8 @@ from scipy.optimize import minimize
 import numpy as np
 import logging
 
-from .airfoil import naca4_airfoil
-from .xfoil import XFoilAnalysis
+from naca_core.airfoil import naca4_airfoil
+from naca_core.xfoil import XFoilAnalysis
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
