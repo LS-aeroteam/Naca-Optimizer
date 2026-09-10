@@ -154,13 +154,13 @@ Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/
 
 | File | Content |
 |------|---------|
-| `airfoil_NACA_xxxx.dat` | Airfoil coordinates (x y) |
+| `airfoil_NACA_xxxx.dat` | Airfoil coordinates (x y), XFOIL-compatible. The first line is the name with the exact m, p, t |
 | `geometry_NACA_xxxx.svg` | Airfoil shape |
 | `pressure_distribution_NACA_xxxx.svg` | Cp on upper and lower surface |
-| `lift_distribution_NACA_xxxx.svg` | ΔCp = Cp,lower − Cp,upper along the chord |
+| `lift_distribution_NACA_xxxx.svg` | ΔCp = Cp,lower − Cp,upper along the chord (both taken at the same x/c) |
 | `optimization_history.csv` | Every evaluated airfoil with its Cl, Cd and score |
 | `optimization_history.svg` | How m, p, t and the score changed during the search |
-| `aerodynamic_data_NACA_xxxx.csv` | Global coefficients and Cp distribution |
+| `aerodynamic_data_NACA_xxxx.csv` | Global coefficients, exact m, p, t and Cp distribution |
 
 The validation script saves `validation_results.csv` and `validation_plot_cl.svg` in `Results/Validation_Re<Reynolds>_Mach<Mach>/`.
 
@@ -178,19 +178,12 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 
 ---
 
-## Known issues
-
-These problems are already identified and fixes are planned:
-
-- `airfoil_NACA_xxxx.dat` is written on a single line (the line breaks are missing), so XFOIL and other tools can't read it yet.
-- `optimization_history.svg` is actually a PNG image saved with the wrong extension. Rename it to `.png` to open it.
-
 ## Limitations
 
 - **Potential flow has no drag.** The in-house solver cannot predict drag, stall or the loss of lift caused by the boundary layer. Its Cl is usually higher than the viscous one.
 - **Reynolds and Mach don't change the in-house result.** They are shown on screen and used in the folder name, but the panel method does not use them (no compressibility correction).
 - **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils.
-- **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"), while the saved geometry uses the exact values.
+- **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.
 - **Only NACA 4-digit airfoils.**
 
