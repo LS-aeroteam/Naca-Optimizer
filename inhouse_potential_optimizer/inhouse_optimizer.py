@@ -2,8 +2,8 @@ from scipy.optimize import minimize, differential_evolution
 import numpy as np
 import logging
 
-from .airfoil import naca4_airfoil
-from .panel_method import run_panel_analysis
+from naca_core.airfoil import naca4_airfoil
+from naca_core.panel_method import run_panel_analysis
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')

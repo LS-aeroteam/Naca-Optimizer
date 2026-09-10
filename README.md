@@ -17,17 +17,19 @@ A third script compares the two, so you can see how far potential flow is from t
 
 ```
 Naca-optimizer/
+├── naca_core/                      # Shared code: geometry, panel method, XFOIL wrapper, plots, checks
 ├── inhouse_potential_optimizer/    # Optimizer based on our panel method
 │   ├── run.py                      # Start here
-│   ├── inhouse_core/               # Geometry, panel method, optimizer, plots
+│   ├── inhouse_optimizer.py
 │   └── Results/                    # Output folders (one per run)
 ├── xfoil_viscous_optimizer/        # Optimizer based on XFOIL
 │   ├── run.py
-│   ├── xfoil_core/                 # Same modules + XFOIL wrapper
+│   ├── xfoil_optimizer.py
 │   └── Results/
 ├── validation_inhouse_vs_xfoil/    # In-house vs XFOIL comparison
 │   ├── run_validation.py
 │   └── Results/
+├── tests/                          # Numerical baseline check
 └── _Original_projects/             # Original MATLAB script and first Python version (reference only)
 ```
 
@@ -85,7 +87,7 @@ python -m pip install -r requirements.txt
 - **Windows:** the script looks for `xfoil.exe` inside `xfoil_viscous_optimizer/`. If it is not there, it downloads XFOIL 6.99 from the official MIT page and puts it there.
 - **Linux / macOS:** install XFOIL yourself and make sure the `xfoil` command is on your PATH, or copy the executable into `xfoil_viscous_optimizer/`.
 
-The XFOIL solver and the validation script check for XFOIL at start-up and tell you if it is missing.
+Every script checks the Python libraries at start-up and tries to install any that are missing. The XFOIL solver and the validation script also check for XFOIL.
 
 ---
 
@@ -164,13 +166,24 @@ The validation script saves `validation_results.csv` and `validation_plot_cl.svg
 
 ---
 
+## Checking your changes
+
+If you touch the geometry or the panel method, run:
+
+```bash
+python tests/baseline_check.py
+```
+
+It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three angles of attack with a saved reference. If everything matches it ends with `All 24 quantities match the baseline`. If a change in results is intended, delete `tests/baseline_reference.json` and create a new one with `python tests/baseline_check.py --generate`.
+
+---
+
 ## Known issues
 
 These problems are already identified and fixes are planned:
 
 - `airfoil_NACA_xxxx.dat` is written on a single line (the line breaks are missing), so XFOIL and other tools can't read it yet.
 - `optimization_history.svg` is actually a PNG image saved with the wrong extension. Rename it to `.png` to open it.
-- If `numpy`, `scipy` or `matplotlib` are missing, the scripts stop with an import error before the environment check runs. Install them from `requirements.txt` first.
 
 ## Limitations
 

@@ -1,18 +1,18 @@
 import os
 import sys
 import csv
-import numpy as np
-import matplotlib.pyplot as plt
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "xfoil_viscous_optimizer")))
+# Make the shared 'naca_core' package (repository root) importable from this folder
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from xfoil_core.airfoil import naca4_airfoil
-from xfoil_core.panel_method import run_panel_analysis
-from xfoil_core.xfoil import XFoilAnalysis
-from xfoil_core.pre_run_checks import perform_all_checks
+# Only the standard library is imported here: numpy/matplotlib and the solver modules
+# are imported inside the functions, after perform_all_checks() has run.
+from naca_core.pre_run_checks import perform_all_checks
 
 def plot_validation_results(results_dict, alphas, results_subfolder):
     """Generates comparative Cl vs Alpha plots."""
+    import matplotlib.pyplot as plt
+
     plt.figure(figsize=(10, 6))
     
     colors = ['b', 'g', 'r', 'c', 'm', 'y']
@@ -59,6 +59,8 @@ def get_fluid_selection():
         print("Error: invalid selection.")
 
 def get_user_input():
+    import numpy as np
+
     print("\n======================================================================")
     print("                SETUP FOR VALIDATION")
     print("======================================================================")
@@ -92,7 +94,11 @@ def main():
     print("=========================================================")
     
     # Run preliminary checks (ensures XFOIL is present)
-    perform_all_checks()
+    perform_all_checks(require_xfoil=True)
+
+    from naca_core.airfoil import naca4_airfoil
+    from naca_core.panel_method import run_panel_analysis
+    from naca_core.xfoil import XFoilAnalysis
 
     alphas, reynolds, mach, num_points = get_user_input()
 
