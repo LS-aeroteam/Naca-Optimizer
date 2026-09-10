@@ -1,0 +1,16 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# XFOIL executables (GPL binary: downloaded automatically on Windows,
+# installed by the user on Linux/macOS)
+xfoil.exe
+/xfoil_viscous_optimizer/xfoil
+
+# Optional: ignore new run outputs and keep only the committed examples
+# (uncomment only if you both agree; force-add examples with `git add -f`)
+# Results/
