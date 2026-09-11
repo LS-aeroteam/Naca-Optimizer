@@ -29,7 +29,7 @@ class XFoilAnalysis:
         Returns:
             tuple: A tuple containing (Cl, Cd, achieved_alpha). Returns (None, None, None) on failure.
         """
-        if not os.path.exists(self.xfoil_exe):
+        if not self.xfoil_exe or not os.path.exists(self.xfoil_exe):
             logging.error(f"XFOIL executable not found at '{self.xfoil_exe}'. Aborting analysis.")
             return None, None, None
             
@@ -75,6 +75,8 @@ class XFoilAnalysis:
         input_filename = os.path.basename(airfoil_file)
         
         with open(os.path.join(os.path.dirname(airfoil_file), "xfoil_input.in"), "w") as f:
+            # Disable XFOIL graphics: no plot windows, and no crash on systems without a display
+            f.write("PLOP\nG\n\n")
             f.write(f"LOAD {input_filename}\n")
             f.write("PANE\n")
             f.write("OPER\n")
@@ -84,7 +86,8 @@ class XFoilAnalysis:
             f.write(f"N {self.ncrit}\n\n")
             f.write("ITER 500\n")
             f.write("PACC\n")
-            f.write(f"{polar_file}\n\n") # Use a clean polar file
+            # XFOIL runs inside the temporary folder (cwd), so the bare file name is enough
+            f.write(f"{os.path.basename(polar_file)}\n\n")
             
             # Sequence of angles to approach the target alpha
             if self.alpha == 0.0:

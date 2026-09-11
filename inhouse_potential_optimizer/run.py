@@ -98,8 +98,11 @@ def main():
 
     result = optimizer.optimize(initial_guess, bounds, max_iter=50)
 
-    if not result.success and result.nfev == 0:
-        print("\n[!] Optimization failed to start. Please check your In-House setup and input parameters.")
+    # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
+    history = optimizer.get_optimization_history()
+    if not any(isinstance(row[4], float) for row in history):
+        print("\n[!] No airfoil could be analysed successfully, so there is no valid result.")
+        print("    Check the solver setup and the input values, then run again.")
         return
         
     # --- Process and Save Optimization Results ---
@@ -109,7 +112,7 @@ def main():
     print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
+    results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_Cl{target_cl}"
     results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
@@ -121,7 +124,6 @@ def main():
                              header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
 
     # Save optimization history
-    history = optimizer.get_optimization_history()
     history_filename = os.path.join(results_dir, "optimization_history.csv")
     with open(history_filename, 'w', newline='') as f:
         writer = csv.writer(f)
