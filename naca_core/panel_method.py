@@ -108,6 +108,34 @@ def _calculate_surface_velocities(lambda_src, gamma, J, L, PSI, alpha_deg):
     Cp = 1 - (Vt**2)
     return Vt, Cp
 
+def surface_distributions(panel_results):
+    """
+    Splits Cp into upper and lower surface and aligns them on the same x/c.
+
+    For cambered airfoils the upper and lower control points with the same index
+    are not at the same x/c, so the lower-surface Cp is linearly interpolated at
+    the upper-surface control points before computing Delta Cp.
+
+    Args:
+        panel_results (dict): The results dictionary from `run_panel_analysis`.
+
+    Returns:
+        tuple: (x_upper, cp_upper, cp_lower, delta_cp), ordered from LE to TE,
+            where cp_lower is evaluated at x_upper and delta_cp = cp_lower - cp_upper.
+    """
+    n_half = panel_results['num_panels'] // 2
+    XC = np.asarray(panel_results['XC'])
+    Cp = np.asarray(panel_results['Cp'])
+
+    x_upper, cp_upper = XC[n_half:], Cp[n_half:]
+    x_lower, cp_lower = XC[:n_half], Cp[:n_half]
+
+    order = np.argsort(x_lower)  # np.interp needs increasing x
+    cp_lower_at_upper = np.interp(x_upper, x_lower[order], cp_lower[order])
+
+    return x_upper, cp_upper, cp_lower_at_upper, cp_lower_at_upper - cp_upper
+
+
 def run_panel_analysis(XB, YB, alpha_deg, verbose=True):
     """
     Runs a complete panel method analysis for a given airfoil geometry and angle of attack.

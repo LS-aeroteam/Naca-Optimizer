@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .panel_method import surface_distributions
+
 def plot_airfoil_geometry(X, Y, title="Airfoil Geometry", **kwargs):
     """
     Plots the geometry of the airfoil.
@@ -64,20 +66,8 @@ def plot_lift_distribution(panel_results, alpha_deg, naca_name="", **kwargs):
         alpha_deg (float): The angle of attack for the title.
         naca_name (str): Optional name of the airfoil for the title.
     """
-    Cp = panel_results['Cp']
-    XC = panel_results['XC']
-    num_panels = panel_results['num_panels']
-    n_half = int(num_panels / 2)
-
-    x_lower = XC[:n_half]
-    cp_lower = Cp[:n_half]
-    x_upper = XC[n_half:]
-    cp_upper = Cp[n_half:]
-
-    # x_upper goes from LE to TE. x_lower goes from TE to LE. 
-    # Reverse lower to align with upper.
-    x_aligned = x_upper
-    delta_cp = cp_lower[::-1] - cp_upper
+    # Lower-surface Cp is interpolated at the upper-surface x/c (see surface_distributions)
+    x_aligned, _, _, delta_cp = surface_distributions(panel_results)
 
     plt.figure(figsize=(10, 6))
     plt.plot(x_aligned, delta_cp, 'g-o', markersize=3, linewidth=1.5, label=r'$\Delta C_p$ (Lift Distribution)')
@@ -136,5 +126,5 @@ def plot_optimization_history(history, **kwargs):
     
     plt.tight_layout()
     if 'save_path' in kwargs:
-        plt.savefig(kwargs['save_path'], format='png', bbox_inches='tight')
+        plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
     plt.close()
