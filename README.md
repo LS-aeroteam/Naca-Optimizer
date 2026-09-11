@@ -23,7 +23,7 @@ Naca-optimizer/
 ├── inhouse_potential_optimizer/    # Optimizer based on our panel method
 │   ├── run.py                      # Start here
 │   ├── inhouse_optimizer.py
-│   └── Results/                    # Output folders (one per run)
+│   └── Results/                    # Output folders, one per run (created by the script, not versioned)
 ├── xfoil_viscous_optimizer/        # Optimizer based on XFOIL
 │   ├── run.py
 │   ├── xfoil_optimizer.py
@@ -189,7 +189,7 @@ Typically the boundary layer explains most of the difference: it makes the real 
 
 ## Output
 
-Each optimization run creates its own folder:
+Each optimization run creates its own folder. The `Results/` folders are created by the scripts and ignored by git, so your runs never end up in a commit.
 
 ```
 Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/       (target-Cl runs)
