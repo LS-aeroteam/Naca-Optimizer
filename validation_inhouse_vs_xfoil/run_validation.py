@@ -131,9 +131,8 @@ def main():
             print(f"  > Alpha = {alpha:4.1f} deg ...", end=" ", flush=True)
             
             # --- In-House Solver (Panel Method) ---
-            # run_panel_analysis in the Xfoil wrapper does not support verbose=False, will print to screen
             try:
-                panel_res = run_panel_analysis(X_panel, Y_panel, float(alpha))
+                panel_res = run_panel_analysis(X_panel, Y_panel, float(alpha), verbose=False)
                 cl_inhouse = panel_res['cl_potential']
             except Exception as e:
                 cl_inhouse = 0.0
@@ -169,7 +168,7 @@ def main():
 
     # --- Save CSV ---
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_subfolder_name = f"Validation_Re{int(reynolds)}_Mach{mach:.3f}"
+    results_subfolder_name = f"Validation_Re{int(round(reynolds))}_Mach{mach:.3f}"
     results_subfolder = os.path.join(base_dir, "Results", results_subfolder_name)
     os.makedirs(results_subfolder, exist_ok=True)
     csv_file = os.path.join(results_subfolder, "validation_results.csv")

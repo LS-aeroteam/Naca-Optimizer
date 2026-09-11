@@ -67,6 +67,7 @@ def main():
     from xfoil_optimizer import NacaOptimizer
     from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
     from naca_core.panel_method import run_panel_analysis, surface_distributions
+    from naca_core.xfoil import XFoilAnalysis
     from naca_core.plotting import (
         plot_airfoil_geometry,
         plot_pressure_coefficient,
@@ -100,8 +101,11 @@ def main():
 
     result = optimizer.optimize(initial_guess, bounds, max_iter=50)
 
-    if not result.success and result.nfev == 0:
-        print("\n[!] Optimization failed to start. Please check your XFOIL setup and input parameters.")
+    # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
+    history = optimizer.get_optimization_history()
+    if not any(isinstance(row[4], float) for row in history):
+        print("\n[!] No airfoil could be analysed successfully, so there is no valid result.")
+        print("    Check the solver setup and the input values, then run again.")
         return
         
     # --- Process and Save Optimization Results ---
@@ -111,7 +115,7 @@ def main():
     print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
+    results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_Cl{target_cl}"
     results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
@@ -123,7 +127,6 @@ def main():
                              header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
 
     # Save optimization history
-    history = optimizer.get_optimization_history()
     history_filename = os.path.join(results_dir, "optimization_history.csv")
     with open(history_filename, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -155,15 +158,21 @@ def main():
         
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
         
-        # Add final Cl/Cd from optimizer to the results for plotting
-        final_opt_perf = next((h for h in reversed(history) if isinstance(h[4], float)), None)
-        final_cl = final_opt_perf[4] if final_opt_perf else None
-        final_cd = final_opt_perf[5] if final_opt_perf else None
+        # Final XFOIL run on the optimized airfoil. The last row of the history is not used:
+        # it can be a finite-difference or line-search point instead of result.x.
+        X_xfoil, Y_xfoil, _ = naca4_airfoil(opt_m, opt_p, opt_t)  # same geometry as in the optimizer
+        final_analysis = XFoilAnalysis(airfoil_name="final", alpha=target_alpha,
+                                       reynolds=target_reynolds, mach=target_mach)
+        final_cl, final_cd, final_alpha = final_analysis.run_analysis(X_xfoil, Y_xfoil)
 
         print("\n--- Global Results ---")
         if final_cl is not None and final_cd is not None:
             print(f"XFOIL Viscous Cl: {final_cl:.4f}")
             print(f"XFOIL Viscous Cd: {final_cd:.5f}")
+            if abs(final_alpha - target_alpha) > 1e-6:
+                print(f"[!] XFOIL converged only up to alpha = {final_alpha} deg (target {target_alpha} deg)")
+        else:
+            print("[!] XFOIL did not converge on the final airfoil: viscous Cl and Cd not available")
         print(f"Potential Cl:     {panel_results['cl_potential']:.4f}")
         print("-------------------------\n")
 
