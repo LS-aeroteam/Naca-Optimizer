@@ -53,13 +53,17 @@ Points are placed with cosine spacing, so there are more of them near the leadin
 - **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). XFOIL analyses the same points as the in-house solver (no re-paneling), so the number of panels you choose applies to both. To help convergence, the angle of attack is reached in 1° steps before the target value.
 
 ### 3. Optimization
-The program changes `m`, `p` and `t` to make this score as small as possible:
+The program changes `m`, `p` and `t` to make a score as small as possible. The score depends on the solver:
 
-```
-score = (10 · (Cl − Cl_target))²  +  penalties
-```
+- **In-house** (no drag available): reach the target Cl.
+  ```
+  score = (10 · (Cl − Cl_target))²
+  ```
+- **XFOIL**, two objectives chosen at start:
+  1. **Minimum Cd at a target Cl.** The score is Cd in drag counts (1 count = 0.0001). If Cl is outside `Cl_target ± 0.005`, a penalty is added that quickly outweighs any Cd difference.
+  2. **Maximum Cl with a Cd limit.** The score is −Cl. If Cd is above the limit, a penalty is added.
 
-Penalties are added when the solver fails and (XFOIL only) when Cd is above your maximum. An airfoil taller than your bounding box is not analysed at all: it gets a penalty that grows with the excess height.
+A large penalty is added when the solver fails. An airfoil taller than your bounding box is not analysed at all: it gets a penalty that grows with the excess height.
 
 Both solvers use the same two-phase search:
 
@@ -120,9 +124,9 @@ python run.py
 While it runs, you see one table row per evaluated airfoil:
 
 ```
-| Eval |   m    |   p    |   t    |   Cl    |   Cd    |  BB  |   Score    |
-|    1 | 0.0200 | 0.4000 | 0.1200 |  0.7359 |       - |      | 4.1077e-01 |
-|    2 | 0.0441 | 0.1438 | 0.1791 |  1.0147 |       - |      | 4.6090e+00 |
+| Eval |   m    |   p    |   t    |   Cl    |   Cd    |  BB  |    Score    |
+|    1 | 0.0200 | 0.4000 | 0.1200 |  0.7359 |       - |      |  4.1077e-01 |
+|    2 | 0.0441 | 0.1438 | 0.1791 |  1.0147 |       - |      |  4.6090e+00 |
 ```
 
 `BB` shows `OUT` when the airfoil is taller than the bounding box (it is not analysed). Cd shows `-` because potential flow has no drag.
@@ -134,7 +138,7 @@ cd xfoil_viscous_optimizer
 python run.py
 ```
 
-Same prompts and same table as the in-house solver, plus **maximum drag coefficient** (default 0.02). In the Cl column, `Failed` means XFOIL did not converge at the target angle, and `Timeout` means it took more than 30 s. Both are treated as failed evaluations.
+Same prompts and same table as the in-house solver, plus the **objective**: `1` = minimum Cd at a target Cl (asks the target Cl), `2` = maximum Cl with a Cd limit (asks the maximum Cd, default 0.02). In the Cl column, `Failed` means XFOIL did not converge at the target angle, and `Timeout` means it took more than 30 s. Both are treated as failed evaluations.
 
 ### Validation
 
@@ -154,7 +158,8 @@ Keep in mind what is being compared: the in-house solver is potential flow, XFOI
 Each optimization run creates its own folder:
 
 ```
-Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/
+Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/       (target-Cl runs)
+Results/Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/    (XFOIL, maximum-Cl runs)
 ```
 
 | File | Content |
@@ -187,6 +192,7 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 
 - **Potential flow has no drag.** The in-house solver cannot predict drag, stall or the loss of lift caused by the boundary layer. Its Cl is usually higher than the viscous one.
 - **Reynolds and Mach don't change the in-house result.** They are shown on screen and used in the folder name, but the panel method does not use them (no compressibility correction).
+- **The in-house solver cannot minimise drag yet.** Only the XFOIL solver has the minimum-Cd objective; the in-house one needs a boundary-layer model first.
 - **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils unless you enter the same seed.
 - **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.

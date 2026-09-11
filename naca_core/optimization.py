@@ -15,12 +15,15 @@ from .airfoil import naca4_airfoil
 BOUNDS = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)]
 INITIAL_GUESS = [0.02, 0.4, 0.12]
 
-FAILURE_PENALTY = 1e6
+# Score given to failed analyses and to airfoils outside the bounding box. It must be larger
+# than the score of any valid airfoil, including the objective penalties of the XFOIL solver
+# (up to about 4e8 for a Cl 2.0 away from the target), so a valid airfoil always ranks better.
+FAILURE_PENALTY = 1e9
 BOX_PENALTY_WEIGHT = 1000.0
 
 # Terminal table: one definition for both solvers
 _TABLE_HEADER = (f"| {'Eval':^4} | {'m':^6} | {'p':^6} | {'t':^6} | {'Cl':^7} | "
-                 f"{'Cd':^7} | {'BB':^4} | {'Score':^10} |")
+                 f"{'Cd':^7} | {'BB':^4} | {'Score':^11} |")
 _SEPARATOR = "-" * len(_TABLE_HEADER)
 
 
@@ -64,7 +67,7 @@ class BaseNacaOptimizer:
     def _print_row(n, m, p, t, cl, cd, bb, score):
         cl_str = cl if isinstance(cl, str) else f"{cl:.4f}"
         cd_str = cd if isinstance(cd, str) else f"{cd:.5f}"
-        print(f"| {n:4d} | {m:6.4f} | {p:6.4f} | {t:6.4f} | {cl_str:>7} | {cd_str:>7} | {bb:^4} | {score:10.4e} |")
+        print(f"| {n:4d} | {m:6.4f} | {p:6.4f} | {t:6.4f} | {cl_str:>7} | {cd_str:>7} | {bb:^4} | {score:11.4e} |")
 
     def _objective_function(self, params):
         self.eval_count += 1
