@@ -121,8 +121,13 @@ def plot_optimization_history(history, **kwargs):
     # Plot 2: Objective Function Score
     ax2.plot(eval_count, scores, 'k-o', markersize=3, label='Objective Score')
     ax2.set_xlabel('Evaluation Number')
-    ax2.set_ylabel('Score (log scale)')
-    ax2.set_yscale('log')
+    if np.all(scores > 0):
+        ax2.set_ylabel('Score (log scale)')
+        ax2.set_yscale('log')
+    else:
+        # Negative scores (maximum-Cl objective): symmetric log scale
+        ax2.set_ylabel('Score (symlog scale)')
+        ax2.set_yscale('symlog', linthresh=1e-2)
     ax2.grid(True)
     ax2.legend()
     
