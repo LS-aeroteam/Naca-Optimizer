@@ -7,9 +7,11 @@ You tell the program the flow conditions (fluid, speed, chord), the angle of att
 The project comes with two solvers that follow the same workflow:
 
 - **In-house potential solver** – our own panel method, written in pure Python. No external programs needed. It gives lift and pressure distribution, but it ignores viscosity, so it cannot compute drag.
-- **XFOIL viscous solver** – runs [XFOIL](https://web.mit.edu/drela/Public/web/xfoil/) in the background. Slower, but it includes the boundary layer, so it also gives drag and can respect a maximum drag coefficient.
+- **XFOIL viscous solver** – runs [XFOIL](https://web.mit.edu/drela/Public/web/xfoil/) in the background. Slower, but it includes the boundary layer, so it also gives drag: it can find the lowest drag at a target lift, or the highest lift under a drag limit.
 
-A third script compares the two, so you can see how far potential flow is from the viscous result.
+A third script compares the two, so you can see how far potential flow is from the viscous result, and why.
+
+What every symbol, message and number means, and why each value was chosen, is explained in [Reference](#reference).
 
 ---
 
@@ -239,7 +241,134 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 ## Roadmap
 
 - Boundary-layer model for the in-house solver, to estimate drag and transition without XFOIL
-- One shared core package for both solvers
+
+---
+
+## Reference
+
+This section explains everything you see on screen and every number the code uses. When a value comes from the original code and was never tuned, we say so.
+
+### Symbols
+
+| Symbol | Meaning |
+|--------|---------|
+| `m` | Maximum camber, as a fraction of the chord |
+| `p` | Position of the maximum camber, as a fraction of the chord |
+| `t` | Maximum thickness, as a fraction of the chord |
+| NACA `mptt` | Name of the airfoil: first digit = m·100, second = p·10, last two = t·100, each rounded. The name is only a label: the geometry uses the exact values |
+| Alpha (α) | Angle of attack, in degrees |
+| Cl | Lift coefficient |
+| Cd | Drag coefficient. 1 drag count = 0.0001 of Cd |
+| Cp | Pressure coefficient. In the panel method Cp = 1 − (V/V∞)² |
+| ΔCp | Cp,lower − Cp,upper, both taken at the same x/c. It shows where the lift is produced along the chord |
+| x/c | Position along the chord: 0 = leading edge, 1 = trailing edge |
+| Re | Reynolds number = speed · chord / kinematic viscosity |
+| Mach | Speed / speed of sound |
+| Ncrit | XFOIL transition parameter (eⁿ method): the higher it is, the later the boundary layer becomes turbulent |
+| BB | Bounding box: the maximum total height the airfoil may have, in metres. It is the distance between the highest and the lowest point of the airfoil (thickness plus camber), measured at 0° angle of attack. Typical use: the space available inside a wing. `OUT` in the BB column means the airfoil is taller than this limit |
+| Seed | Number that fixes the random part of the search. Same seed and same inputs give the same run |
+
+### Terminal messages
+
+| Prefix | Meaning |
+|--------|---------|
+| `[+]` | A step starts or ends |
+| `[i]` | Information (computed conditions, exact parameters, seed, where files are saved) |
+| `[!]` | Warning or error: read it |
+| `PHASE 1 / 2 / 3` | Main steps: 1 = optimization, 2 = geometry and plots, 3 = pressure analysis of the final airfoil |
+| `--> Phase 1 / Phase 2` | The two parts of the search inside PHASE 1: Genetic Algorithm, then SLSQP |
+
+### Optimization table
+
+```
+| Eval |   m    |   p    |   t    |   Cl    |   Cd    |  BB  |    Score    |
+```
+
+| Column | Meaning |
+|--------|---------|
+| Eval | Number of the evaluation. The final message calls them "iterations": it is the total number of airfoils tried, including the ones outside the box or failed |
+| m, p, t | Parameters of the airfoil being tried |
+| Cl, Cd | Result of the analysis. Cd is `-` in the in-house solver (potential flow has no drag) |
+| BB | `OUT` = the airfoil is taller than the bounding box. It is not analysed and gets a penalty |
+| Score | The number the optimizer tries to make as small as possible (see below). Lower is better |
+
+Special values in the Cl column:
+
+| Value | Meaning |
+|-------|---------|
+| `Failed` | The analysis did not give a valid result. For XFOIL this includes "did not converge at the target angle" |
+| `Timeout` | XFOIL took more than 30 s and was stopped |
+| `-` | Not analysed (airfoil outside the bounding box) |
+
+### Score
+
+| Solver / objective | Score | Unit |
+|--------------------|-------|------|
+| In-house | (10 · (Cl − Cl_target))² | none |
+| XFOIL, minimum Cd | Cd · 10⁴ + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
+| XFOIL, maximum Cl | −Cl + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
+| Failed or timeout | 10⁹ + a small term that is lower for airfoils closer to t = 0.12 and m = 0.05 | none |
+| Outside the box | 10⁹ + ((height − box) · 1000)² | none |
+
+### Validation line
+
+```
+  > Alpha =  4.0 deg ... [OK] In-House Cl: 0.7359 | XFOIL Cl: 0.6892 | dCl total +0.0467 = num -0.0078 | Mach -0.0098 | visc +0.0643
+```
+
+| Part | Meaning |
+|------|---------|
+| `[OK]` | All five analyses worked |
+| `[FAILED <run>]`, `[TIMEOUT <run>]` | That XFOIL run failed. `<run>` is `inviscid M0`, `inviscid M`, `viscous M0` or `viscous M` (M0 = Mach 0, M = real Mach) |
+| XFOIL Cl | The reference: XFOIL viscous at the real Mach |
+| dCl total | In-house Cl − reference. Positive = the in-house solver overestimates Cl |
+| num | Numerical error of the panel method (in-house vs XFOIL inviscid, both at Mach 0) |
+| Mach | Part due to compressibility, which the in-house solver ignores |
+| visc | Part due to the boundary layer, which the in-house solver ignores |
+| `(Mach first)`, `(visc first)` | A single order was used because an intermediate run failed |
+| `(Mach+visc combined)` | Mach and viscosity could only be computed together |
+| `(breakdown N/A)` | Only the total is available |
+
+### Values and why
+
+| Value | Where | Why |
+|-------|-------|-----|
+| Air: ν = 1.46·10⁻⁵ m²/s, a = 340.3 m/s | Fluid choice 1 | Standard atmosphere at sea level (15 °C) |
+| Water: ν = 1.00·10⁻⁶ m²/s, a = 1482 m/s | Fluid choice 2 | Water at about 20 °C |
+| 50 m/s, 1 m, 4°, Cl 0.8 | Default inputs | Example values from the original code. In air they give Re ≈ 3.4·10⁶ and Mach ≈ 0.15 |
+| Bounding box 0.3 m | Default input | From the original code. With a 1 m chord the tallest airfoil in the search range is 0.27 m high, so by default the box never cuts anything |
+| 160 panels | Default input | Accurate enough (panel-method error about 1% of Cl against XFOIL inviscid) and fast |
+| 0 ≤ m ≤ 0.09 | Search range | Keeps the first digit of the NACA name a single digit |
+| 0.1 ≤ p ≤ 0.7, 0.05 ≤ t ≤ 0.25 | Search range | From the original code. They cover the usual NACA 4-digit airfoils; not tuned |
+| NACA 2412 | Starting airfoil, always in the initial population | Common reference airfoil, from the original code |
+| Population 5, 5 generations | Genetic Algorithm | From the original code: 15 airfoils × 6 generations = 90 evaluations. A short global search is enough because SLSQP refines the result |
+| SLSQP: max 50 iterations, ftol 10⁻⁴ | Local search | From the original code; not tuned |
+| Step 10⁻⁴ (in-house), 2·10⁻³ (XFOIL) | SLSQP finite differences | XFOIL writes Cl with 4 decimals. With a step of 10⁻⁴ the change of Cl due to p and t is below 0.0001, so the gradient came out as zero and the search stopped early. The panel method has no such limit |
+| Weight 10 | In-house score | From the original code. It only scales the score: the best airfoil does not change |
+| 10⁹ | Score of failed and out-of-box airfoils | Must be higher than any valid airfoil. The worst valid score is about 4·10⁸ (Cl 2.0 away from the target), so 10⁹ always ranks a valid airfoil first |
+| Small term towards t = 0.12, m = 0.05 | Failed airfoils | From the original code: among failed airfoils it prefers usual shapes, so the search moves back towards shapes that converge |
+| (excess · 1000)² | Out-of-box penalty | Grows with the excess height, so the search knows which way to go back |
+| ± 0.005 | Cl tolerance, minimum-Cd objective | 0.6% of a Cl of 0.8: well above XFOIL's resolution (0.0001) and small enough to keep the target meaningful. An exact Cl would be impossible to hit numerically |
+| 10⁴ | Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts. Near the target, candidate airfoils differ by about 20 counts in our runs, so going outside the tolerance never pays off |
+| 10⁴ | Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs as much as 1.0 of Cl |
+| Cd 0.02 | Default limit, maximum-Cl objective | From the old "maximum tolerable Cd" prompt. At 4° it is too loose to matter (the best airfoil had Cd ≈ 0.007): still to be decided |
+| Ncrit = 9 | XFOIL | XFOIL's default, the usual value for an average wind tunnel |
+| ITER 500 | XFOIL | Maximum viscous iterations per angle, from the original code |
+| 1° steps up to the target angle | XFOIL | XFOIL converges more easily when each angle starts from the previous solution. From the original code |
+| 0.1° | Angle tolerance | If XFOIL's closest converged angle is further than this from the target, its Cl belongs to another angle and the evaluation counts as failed |
+| 30 s | XFOIL timeout | From the original code. A normal XFOIL run takes about a second |
+| 1 – 999 999 | Random seed | Any integer works; the range just keeps it short to type |
+| 10⁻⁹ | Baseline tolerance (`tests/`) | Far above round-off (we see about 10⁻¹⁵) and far below a real change (a deliberate small error in the code changed Cp by 2·10⁻⁵) |
+| NACA 0012, 2412, 4412 | Validation airfoils | Symmetric, mild camber, higher camber |
+| −4° to 10°, step 2° | Validation sweep | From the original code |
+
+### Conditions
+
+- **No valid result:** if no airfoil was analysed successfully, the run stops with `[!] No airfoil could be analysed successfully` instead of reporting a meaningless airfoil.
+- **Final checks (XFOIL):** after the search, XFOIL runs once more on the best airfoil. A warning appears if it does not converge, if it converges at another angle, if Cl is outside the tolerance (minimum-Cd objective) or if Cd is above the limit (maximum-Cl objective).
+- **Missing libraries:** the script asks before installing them with pip. Answer no and it prints the command to run yourself.
+- **Invalid input:** the optimizers stop. The validation script instead falls back to fixed values (Re 10⁶, Mach 0, alpha −4° to 10°), which are not the same as its prompt defaults.
+- **Trailing edge:** the standard NACA formula leaves a small gap at the trailing edge (0.0025 of the chord for t = 0.12). The code keeps it as it is; whether to close it is still to be decided.
 
 ## Credits
 
