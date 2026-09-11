@@ -164,6 +164,17 @@ dCl total = in-house Cl − XFOIL viscous Cl (real Mach)
 
 A positive value means the in-house solver overestimates Cl. Mach and viscosity affect each other, so their parts are the average of the two possible orders (Mach first, viscosity first); the three parts always add up exactly to the total.
 
+If one of the intermediate XFOIL runs fails, the script uses the runs that worked instead of dropping the point, and marks the line:
+
+| Failed run | Breakdown | Mark |
+|------------|-----------|------|
+| viscous at Mach 0 | Mach first | `(Mach first)` |
+| inviscid at the real Mach | viscosity first | `(visc first)` |
+| both of the above | Mach and viscosity together | `(Mach+visc combined)` |
+| inviscid at Mach 0 | only the total | `(breakdown N/A)` |
+
+With a single order, the split between Mach and viscosity can differ from the average by a few thousandths of Cl. In the error plot these points have hollow markers.
+
 Example output:
 
 ```
@@ -197,7 +208,7 @@ The validation script saves in `Results/Validation_Re<Reynolds>_Mach<Mach>/`:
 
 | File | Content |
 |------|---------|
-| `validation_results.csv` | All Cl values (in-house and the four XFOIL runs), viscous Cd and the error parts |
+| `validation_results.csv` | All Cl values (in-house and the four XFOIL runs), viscous Cd, the error parts and the breakdown method used |
 | `validation_plot_cl.svg` | Cl vs alpha for each airfoil: in-house, XFOIL inviscid (Mach 0), XFOIL viscous |
 | `validation_plot_error.svg` | Error parts vs alpha for each airfoil, with the total |
 
