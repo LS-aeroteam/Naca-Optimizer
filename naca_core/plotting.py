@@ -93,8 +93,10 @@ def plot_optimization_history(history, **kwargs):
         print("History is empty, cannot generate plot.")
         return
 
-    # Filter out rows with non-numeric data (e.g., 'Failed', 'Bounds') and convert to numpy array
-    history_np = np.array([row for row in history if isinstance(row[4], (int, float))], dtype=float)
+    # Keep only successful evaluations (numeric Cl) and the numeric columns used here:
+    # Eval, m, p, t, Score (Cd can be empty for the in-house solver)
+    history_np = np.array([[row[0], row[1], row[2], row[3], row[6]]
+                           for row in history if isinstance(row[4], (int, float))], dtype=float)
     if history_np.shape[0] == 0:
         print("No successful evaluations in history, cannot generate plot.")
         return
@@ -103,7 +105,7 @@ def plot_optimization_history(history, **kwargs):
     m = history_np[:, 1]
     p = history_np[:, 2]
     t = history_np[:, 3]
-    scores = history_np[:, 6]
+    scores = history_np[:, 4]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 

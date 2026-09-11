@@ -50,7 +50,7 @@ Points are placed with cosine spacing, so there are more of them near the leadin
 
 ### 2. Aerodynamics
 - **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own source strength and all panels share one vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
-- **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). To help convergence, the angle of attack is reached in 1° steps before the target value.
+- **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). XFOIL analyses the same points as the in-house solver (no re-paneling), so the number of panels you choose applies to both. To help convergence, the angle of attack is reached in 1° steps before the target value.
 
 ### 3. Optimization
 The program changes `m`, `p` and `t` to make this score as small as possible:
@@ -59,10 +59,14 @@ The program changes `m`, `p` and `t` to make this score as small as possible:
 score = (10 · (Cl − Cl_target))²  +  penalties
 ```
 
-Penalties are added when the airfoil is taller than your bounding box, when the solver fails, and (XFOIL only) when Cd is above your maximum.
+Penalties are added when the solver fails and (XFOIL only) when Cd is above your maximum. An airfoil taller than your bounding box is not analysed at all: it gets a penalty that grows with the excess height.
 
-- **In-house:** a short differential evolution run (a genetic-style global search) followed by SLSQP (a gradient-based local refinement).
-- **XFOIL:** SLSQP starting from a NACA 2412.
+Both solvers use the same two-phase search:
+
+1. **Genetic Algorithm** (global search, scipy differential evolution): a random population of airfoils, which always includes a NACA 2412, evolves for a few generations.
+2. **SLSQP** (local refinement): a gradient-based method starts from the best airfoil of phase 1. The finite-difference step is 1e-4 for the in-house solver and 2e-3 for XFOIL, because XFOIL prints Cl with only 4 decimals.
+
+The random population depends on a seed: the same seed gives exactly the same run.
 
 Search limits: `0 ≤ m ≤ 0.09`, `0.1 ≤ p ≤ 0.7`, `0.05 ≤ t ≤ 0.25`.
 
@@ -111,16 +115,17 @@ python run.py
 | Target Cl | 0.8 | |
 | Bounding box max height | 0.3 m | Maximum total height of the airfoil (thickness + camber) |
 | Number of panels | 160 | 60 = fast, 160 = accurate |
+| Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
 
 While it runs, you see one table row per evaluated airfoil:
 
 ```
-| Eval |   m    |   p    |   t    |   Cl   | BB OOB |   Score    |
-|    1 | 0.0146 | 0.6218 | 0.0973 | 0.7047 |        | 9.0794e-01 |
-|    2 | 0.0424 | 0.3603 | 0.1974 | 1.0729 |        | 7.4451e+00 |
+| Eval |   m    |   p    |   t    |   Cl    |   Cd    |  BB  |   Score    |
+|    1 | 0.0200 | 0.4000 | 0.1200 |  0.7359 |       - |      | 4.1077e-01 |
+|    2 | 0.0441 | 0.1438 | 0.1791 |  1.0147 |       - |      | 4.6090e+00 |
 ```
 
-`BB OOB` shows `H` when the airfoil is taller than the bounding box.
+`BB` shows `OUT` when the airfoil is taller than the bounding box (it is not analysed). Cd shows `-` because potential flow has no drag.
 
 ### XFOIL solver
 
@@ -129,7 +134,7 @@ cd xfoil_viscous_optimizer
 python run.py
 ```
 
-Same prompts as the in-house solver, plus **maximum drag coefficient** (default 0.02). The table shows Cd next to Cl. A `*` next to a value means XFOIL did not converge exactly at the target angle and the closest converged angle was used.
+Same prompts and same table as the in-house solver, plus **maximum drag coefficient** (default 0.02). In the Cl column, `Failed` means XFOIL did not converge at the target angle, and `Timeout` means it took more than 30 s. Both are treated as failed evaluations.
 
 ### Validation
 
@@ -182,7 +187,7 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 
 - **Potential flow has no drag.** The in-house solver cannot predict drag, stall or the loss of lift caused by the boundary layer. Its Cl is usually higher than the viscous one.
 - **Reynolds and Mach don't change the in-house result.** They are shown on screen and used in the folder name, but the panel method does not use them (no compressibility correction).
-- **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils.
+- **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils unless you enter the same seed.
 - **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.
 - **Only NACA 4-digit airfoils.**

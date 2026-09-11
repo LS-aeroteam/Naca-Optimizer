@@ -1,6 +1,7 @@
 import os
 import csv
 import sys
+import random
 
 # Make the shared 'naca_core' package (repository root) importable from this folder
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,8 +52,10 @@ def get_user_input():
         
         max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
         num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
+        seed_text = input("Enter random seed [default: random]: ").strip()
+        seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
         
-        return target_reynolds, target_alpha, target_cl, max_height_box, chord, num_panels
+        return target_reynolds, target_alpha, target_cl, max_height_box, chord, num_panels, seed
 
     except ValueError:
         print("\n[!] Invalid input. Please enter numerical values.")
@@ -65,6 +68,7 @@ def main():
 
     from inhouse_optimizer import NacaOptimizer
     from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+    from naca_core.optimization import print_phase
     from naca_core.panel_method import run_panel_analysis, surface_distributions
     from naca_core.plotting import (
         plot_airfoil_geometry,
@@ -78,14 +82,10 @@ def main():
     if inputs is None:
         sys.exit(1)
 
-    target_reynolds, target_alpha, target_cl, max_height_box, chord, num_panels = inputs
+    target_reynolds, target_alpha, target_cl, max_height_box, chord, num_panels, seed = inputs
     
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
-    print("\n======================================================================")
-    print("                PHASE 1: AIRFOIL OPTIMIZATION")
-    print("======================================================================")
-    initial_guess = [0.02, 0.4, 0.12]  # Start with a NACA 2412
-    bounds = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)] # Sensible bounds for NACA 4-digits
+    print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
 
     optimizer = NacaOptimizer(
         reynolds=target_reynolds,
@@ -93,10 +93,11 @@ def main():
         target_cl=target_cl,
         max_height_box=max_height_box,
         chord=chord,
-        num_panels=num_panels
+        num_panels=num_panels,
+        seed=seed
     )
 
-    result = optimizer.optimize(initial_guess, bounds, max_iter=50)
+    result = optimizer.optimize(max_iter=50)
 
     # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
     history = optimizer.get_optimization_history()
@@ -110,6 +111,7 @@ def main():
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
     print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
     print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
+    print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_Cl{target_cl}"
@@ -134,12 +136,16 @@ def main():
     history_plot_filename = os.path.join(results_dir, "optimization_history.svg")
     plot_optimization_history(history, save_path=history_plot_filename)
     
+    # --- PHASE 2: AIRFOIL ANALYSIS ---
+    print_phase("PHASE 2: AIRFOIL ANALYSIS")
     print("\n[+] Generating plots and extracting final aerodynamic data...")
     
     # 1. Plot airfoil geometry
     airfoil_plot_filename = os.path.join(results_dir, f"geometry_NACA_{naca_opt_str}.svg")
     plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: NACA {naca_opt_str}", save_path=airfoil_plot_filename)
     
+    # --- PHASE 3: POTENTIAL & PRESSURE ANALYSIS ---
+    print_phase("PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     try:
         # Regenerate airfoil with panel-specific points if needed
         X_panel, Y_panel, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
@@ -147,7 +153,8 @@ def main():
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
         
         print("\n--- Global Results ---")
-        print(f"Potential Cl: {panel_results['cl_potential']:.4f}")
+        print(f"Potential Cl:     {panel_results['cl_potential']:.4f}")
+        print("Cd:               not available (potential flow)")
         print("-------------------------\n")
 
         cp_plot_filename = os.path.join(results_dir, f"pressure_distribution_NACA_{naca_opt_str}.svg")
@@ -161,8 +168,8 @@ def main():
         with open(csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["# Global Coefficients"])
-            writer.writerow(["Potential_Cl", "m", "p", "t"])
-            writer.writerow([panel_results['cl_potential'], opt_m, opt_p, opt_t])
+            writer.writerow(["Potential_Cl", "m", "p", "t", "Seed"])
+            writer.writerow([panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
             writer.writerow([])
             writer.writerow(["# Surface Distributions (Cp_Lower interpolated at the upper-surface x/c)"])
             writer.writerow(["x/c", "Cp_Upper", "Cp_Lower", "Delta_Cp"])
