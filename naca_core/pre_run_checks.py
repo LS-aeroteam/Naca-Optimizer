@@ -21,7 +21,8 @@ def check_python_libraries():
     required_libraries = {
         "numpy": "for numerical operations",
         "scipy": "for optimization functions",
-        "matplotlib": "for plotting results"
+        "matplotlib": "for plotting results",
+        "ezdxf": "for the DXF export (CAD)"
     }
     
     missing_libs = []

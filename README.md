@@ -81,7 +81,7 @@ Search limits: `0 ≤ m ≤ 0.09`, `0.1 ≤ p ≤ 0.7`, `0.05 ≤ t ≤ 0.25`.
 ## Requirements
 
 - Python 3.12 or newer (tested with 3.12 and 3.14)
-- `numpy`, `scipy`, `matplotlib` (minimum versions in `requirements.txt`)
+- `numpy`, `scipy`, `matplotlib`, `ezdxf` (for the DXF export); minimum versions in `requirements.txt`
 - XFOIL – only for the XFOIL solver and the validation script
 
 ## Installation
@@ -122,6 +122,7 @@ python run.py
 | Bounding box max height | 0.3 m | Maximum total height of the airfoil (thickness + camber) |
 | Number of panels | 160 | 60 = fast, 160 = accurate |
 | Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
+| Span for the 3D export | same as the chord | Length of the extruded wing in the STL file, in metres |
 
 While it runs, you see one table row per evaluated airfoil:
 
@@ -205,6 +206,10 @@ Results/Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/    (XFOIL, maximum-Cl ru
 | `optimization_history.csv` | Every evaluated airfoil with its Cl, Cd and score |
 | `optimization_history.svg` | How m, p, t and the score changed during the search |
 | `aerodynamic_data_NACA_xxxx.csv` | Global coefficients, exact m, p, t and Cp distribution |
+| `export/airfoil_NACA_xxxx.dxf` | CAD: closed 2D profile in mm, ready to extrude |
+| `export/airfoil_NACA_xxxx_mm.csv` | CAD: list of points `x,y,z` in mm (z = 0), trailing edge left open |
+| `export/airfoil_NACA_xxxx_surface.vtk` | ParaView: airfoil contour in m with Cp and V/V∞ (in-house panel method) |
+| `export/airfoil_NACA_xxxx_wing.stl` | OpenFOAM, CAD, 3D printing: the airfoil extruded along z (closed surface, in m) |
 
 The validation script saves in `Results/Validation_Re<Reynolds>_Mach<Mach>/`:
 
@@ -213,6 +218,27 @@ The validation script saves in `Results/Validation_Re<Reynolds>_Mach<Mach>/`:
 | `validation_results.csv` | All Cl values (in-house and the four XFOIL runs), viscous Cd, the error parts and the breakdown method used |
 | `validation_plot_cl.svg` | Cl vs alpha for each airfoil: in-house, XFOIL inviscid (Mach 0), XFOIL viscous |
 | `validation_plot_error.svg` | Error parts vs alpha for each airfoil, with the total |
+
+---
+
+## Using the exported files
+
+The files in `export/` use the chord you entered, so they already have the real size.
+
+**CAD**
+- The easiest route is the **DXF**: import or insert it into a sketch on the plane you want. It is in millimetres and already closed (a spline through the points plus a short line at the trailing edge), so you can extrude it straight away. For a tapered or twisted wing, place scaled or rotated copies on parallel planes and use a loft.
+- The **CSV** is for CAD tools that build a curve from a list of points. It is comma-separated, in millimetres, without a header. The trailing edge is left open: close it with a line in the sketch. Check which separator and units your CAD expects before importing.
+- The **STL** opens as a mesh body: fine for 3D printing or as a reference, but not editable like a solid.
+
+**ParaView**
+- Open the `.vtk` file and press Apply. Colour by `Cp` or `V_over_Vinf`.
+- For a Cp–x/c plot use the filter *Plot Data* with `Points_X` on the x axis.
+- The values come from the in-house panel method (potential flow), also in XFOIL runs.
+
+**OpenFOAM**
+- Copy the `.stl` into `constant/triSurface/` of your case and use it as geometry in `snappyHexMeshDict`. Coordinates are in metres, the wing goes from z = −span/2 to +span/2.
+- For a 2D case, make the background mesh thinner in z than the span, so that the wing crosses the whole domain.
+- Tested with OpenFOAM v1912: `surfaceCheck` reports a closed surface, one zone, consistent normals and no illegal triangles; `snappyHexMesh` removes the cells inside the airfoil and ends with "Finished meshing without any errors". In our quick test the case was not set up as a proper 2D case, so `checkMesh` then complains about the empty patches: that is the test case, not the geometry.
 
 ---
 
@@ -237,6 +263,7 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 - **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.
 - **Only NACA 4-digit airfoils.**
+- **The export does not mesh or run a CFD case.** It gives geometry and surface data; mesh, boundary conditions and solver setup are up to you.
 
 ## Roadmap
 
@@ -360,6 +387,10 @@ Special values in the Cl column:
 | 1 – 999 999 | Random seed | Any integer works; the range just keeps it short to type |
 | 10⁻⁹ | Baseline tolerance (`tests/`) | Far above round-off (we see about 10⁻¹⁵) and far below a real change (a deliberate small error in the code changed Cp by 2·10⁻⁵) |
 | NACA 0012, 2412, 4412 | Validation airfoils | Symmetric, mild camber, higher camber |
+| mm (DXF, CSV), m (VTK, STL) | Export units | CAD programs work in millimetres; OpenFOAM and ParaView in SI units |
+| Span = chord | Default for the STL | A square planform is a neutral starting point; it only sets the length of the extrusion |
+| 399 points | DXF, CSV, STL | Same points as the `.dat` file. The DXF spline stays within 0.01 mm of the exact NACA shape for a 250 mm chord |
+| Straight line / flat faces at the trailing edge | DXF, STL | Closes the small gap of the NACA formula so the profile can be extruded and the STL is watertight. The geometry itself is not changed |
 | −4° to 10°, step 2° | Validation sweep | From the original code |
 
 ### Conditions

@@ -34,6 +34,8 @@ The same seed always gives the same run: the seed used is printed at the end and
 
 `Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/` with the airfoil coordinates (`.dat`), plots (`.svg`), the optimization history and the aerodynamic data (`.csv`). The full list of files is in the main README.
 
+The `export/` subfolder contains the airfoil ready for CAD (DXF, CSV in mm), ParaView (VTK) and OpenFOAM (STL): see "Using the exported files" in the main README.
+
 ## More
 
 What every symbol, message and value means, and why each value was chosen: [Reference](../README.md#reference) in the main README.
