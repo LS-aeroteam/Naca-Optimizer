@@ -10,6 +10,7 @@
 - [ ]  **Correzione di Prandtl-Glauert**: Aggiungere la correzione per effetti di compressibilità subsonica (baseline: il numero di Mach incide per circa -0.02 sul Cl a 10°).
 - [ ]  **Analisi Transizione (Spike)**: Analizzare l'implementazione del criterio di transizione in XFOIL (metodo e^N o similare) e definire l'architettura per replicarlo/adattarlo nel codice.
 - [ ]  **Gestione Separazione (Spike)**: Strutturare la logica algoritmica per il rilevamento e l'integrazione degli effetti della separazione del flusso.
+- [ ]  **Linee di corrente**: implementare l'output con linee di corrente per il profilo vincente
 
 ## ⚙️ Architettura I/O e Ottimizzazione
 
