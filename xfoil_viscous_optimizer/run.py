@@ -66,7 +66,7 @@ def main():
 
     from xfoil_optimizer import NacaOptimizer
     from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
-    from naca_core.panel_method import run_panel_analysis
+    from naca_core.panel_method import run_panel_analysis, surface_distributions
     from naca_core.plotting import (
         plot_airfoil_geometry,
         plot_pressure_coefficient,
@@ -108,6 +108,7 @@ def main():
     opt_m, opt_p, opt_t = result.x
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
     print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
+    print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
@@ -118,7 +119,8 @@ def main():
     # Save optimized airfoil coordinates
     X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
     airfoil_filename = os.path.join(results_dir, f"airfoil_NACA_{naca_opt_str}.dat")
-    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename)
+    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename,
+                             header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
 
     # Save optimization history
     history = optimizer.get_optimization_history()
@@ -176,18 +178,14 @@ def main():
         with open(csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["# Global Coefficients"])
-            writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl"])
-            writer.writerow([final_cl, final_cd, panel_results['cl_potential']])
+            writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", "m", "p", "t"])
+            writer.writerow([final_cl, final_cd, panel_results['cl_potential'], opt_m, opt_p, opt_t])
             writer.writerow([])
-            writer.writerow(["# Surface Distributions"])
+            writer.writerow(["# Surface Distributions (Cp_Lower interpolated at the upper-surface x/c)"])
             writer.writerow(["x/c", "Cp_Upper", "Cp_Lower", "Delta_Cp"])
             
-            n_half = panel_results['num_panels'] // 2
-            x_upper = panel_results['XC'][n_half:]
-            cp_upper = panel_results['Cp'][n_half:]
-            cp_lower = panel_results['Cp'][:n_half][::-1]
-            delta_cp = cp_lower - cp_upper
-            
+            x_upper, cp_upper, cp_lower, delta_cp = surface_distributions(panel_results)
+
             for i in range(len(x_upper)):
                 writer.writerow([f"{x_upper[i]:.6f}", f"{cp_upper[i]:.6f}", f"{cp_lower[i]:.6f}", f"{delta_cp[i]:.6f}"])
 
