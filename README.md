@@ -87,7 +87,7 @@ python -m pip install -r requirements.txt
 - **Windows:** the script looks for `xfoil.exe` inside `xfoil_viscous_optimizer/`. If it is not there, it downloads XFOIL 6.99 from the official MIT page and puts it there.
 - **Linux / macOS:** install XFOIL yourself and make sure the `xfoil` command is on your PATH, or copy the executable into `xfoil_viscous_optimizer/`.
 
-Every script checks the Python libraries at start-up and tries to install any that are missing. The XFOIL solver and the validation script also check for XFOIL.
+Every script checks the Python libraries at start-up and, if some are missing, asks whether to install them with pip. The XFOIL solver and the validation script also check for XFOIL.
 
 ---
 

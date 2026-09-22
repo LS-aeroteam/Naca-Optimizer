@@ -34,7 +34,12 @@ def check_python_libraries():
             missing_libs.append(lib)
             
     if missing_libs:
-        print("\n[i] Missing libraries detected. Attempting to install them automatically...")
+        print(f"\n[i] Missing libraries: {', '.join(missing_libs)}")
+        answer = input("    Install them now with pip? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("\n[!] Install them manually, then run the script again:")
+            print(f"    python -m pip install -r \"{os.path.join(REPO_ROOT, 'requirements.txt')}\"")
+            sys.exit(1)
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_libs)
             print("    [+] Successfully installed missing libraries.\n")
@@ -47,9 +52,12 @@ def check_python_libraries():
 
 # --- XFOIL Executable Check ---
 
-def find_xfoil_executable():
+def find_xfoil_executable(verbose=False):
     """
-    Searches for the XFOIL executable in the project root and system PATH.
+    Searches for the XFOIL executable in the XFOIL solver folder and in the system PATH.
+
+    Args:
+        verbose (bool): Print where the executable was found (used only by the start-up check).
 
     Returns:
         str: The full path to the XFOIL executable if found, otherwise None.
@@ -59,13 +67,15 @@ def find_xfoil_executable():
     # 1. Check in the XFOIL solver folder
     local_path = os.path.join(XFOIL_DIR, xfoil_name)
     if os.path.isfile(local_path):
-        print(f"    - Found XFOIL executable in project root: {local_path}")
+        if verbose:
+            print(f"    - Found XFOIL executable in the XFOIL solver folder: {local_path}")
         return local_path
     
     # 2. Check in system's PATH
     system_path = shutil.which(xfoil_name)
     if system_path:
-        print(f"    - Found XFOIL executable in system PATH: {system_path}")
+        if verbose:
+            print(f"    - Found XFOIL executable in system PATH: {system_path}")
         return system_path
         
     return None
@@ -77,7 +87,7 @@ def check_xfoil():
     Exits the program if XFOIL cannot be found or downloaded.
     """
     print("[+] Checking for XFOIL executable...")
-    xfoil_path = find_xfoil_executable()
+    xfoil_path = find_xfoil_executable(verbose=True)
     
     if xfoil_path is None:
         print("\n[!] XFOIL executable not found.")
