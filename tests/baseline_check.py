@@ -16,11 +16,11 @@ import numpy as np
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(TESTS_DIR)
-sys.path.insert(0, os.path.join(REPO_ROOT, "inhouse_potential_optimizer"))
+sys.path.insert(0, REPO_ROOT)
 
 # --- Modules under test: when files move (refactor), update only these two lines ---
-from inhouse_core.airfoil import naca4_airfoil
-from inhouse_core.panel_method import run_panel_analysis
+from naca_core.airfoil import naca4_airfoil
+from naca_core.panel_method import run_panel_analysis
 # ------------------------------------------------------------------------------------
 
 REFERENCE_FILE = os.path.join(TESTS_DIR, "baseline_reference.json")

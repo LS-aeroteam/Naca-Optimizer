@@ -1,16 +1,13 @@
 import os
 import csv
 import sys
-from xfoil_core.pre_run_checks import perform_all_checks
-from xfoil_core.optimizer import NacaOptimizer
-from xfoil_core.airfoil import naca4_airfoil, save_airfoil_coordinates
-from xfoil_core.panel_method import run_panel_analysis
-from xfoil_core.plotting import (
-    plot_airfoil_geometry, 
-    plot_pressure_coefficient, 
-    plot_lift_distribution,
-    plot_optimization_history
-)
+
+# Make the shared 'naca_core' package (repository root) importable from this folder
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Only the standard library is imported here: numpy/scipy/matplotlib are imported
+# inside main(), after perform_all_checks() has verified (or installed) them.
+from naca_core.pre_run_checks import perform_all_checks
 
 def get_fluid_selection():
     fluids = {
@@ -65,8 +62,18 @@ def get_user_input():
 def main():
     """Main execution block for the aerodynamic suite."""
     # Run all dependency and environment checks first
-    perform_all_checks()
-    
+    perform_all_checks(require_xfoil=True)
+
+    from xfoil_optimizer import NacaOptimizer
+    from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+    from naca_core.panel_method import run_panel_analysis
+    from naca_core.plotting import (
+        plot_airfoil_geometry,
+        plot_pressure_coefficient,
+        plot_lift_distribution,
+        plot_optimization_history
+    )
+
     # Get aerodynamic targets from the user
     inputs = get_user_input()
     if inputs is None:
