@@ -51,7 +51,7 @@ Each airfoil is built from three numbers:
 Points are placed with cosine spacing, so there are more of them near the leading and trailing edge, where the flow changes fastest.
 
 ### 2. Aerodynamics
-- **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own source strength and all panels share one vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
+- **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own (uniformly distributed) source strength and all panels share one (uniformly distributed) vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
 - **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). XFOIL analyses the same points as the in-house solver (no re-paneling), so the number of panels you choose applies to both. To help convergence, the angle of attack is reached in 1° steps before the target value.
 
 ### 3. Optimization
@@ -265,9 +265,7 @@ It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three
 - **Only NACA 4-digit airfoils.**
 - **The export does not mesh or run a CFD case.** It gives geometry and surface data; mesh, boundary conditions and solver setup are up to you.
 
-## Roadmap
-
-- Boundary-layer model for the in-house solver, to estimate drag and transition without XFOIL
+Open items and planned work are tracked in [TODO.md](TODO.md).
 
 ---
 
