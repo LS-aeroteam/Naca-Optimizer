@@ -48,15 +48,25 @@ def get_user_input():
         print(f"    - Mach Number: {target_mach:.3f}")
 
         target_alpha = float(input("\nEnter target angle of attack (degrees) [e.g., 4.0]: ") or 4.0)
-        target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
-        max_cd = float(input("Enter maximum tolerable drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
+
+        print("\nSelect the optimization objective:")
+        print("1. Minimum Cd at a target Cl")
+        print("2. Maximum Cl with a Cd limit")
+        objective_choice = input("Choice (1 or 2) [default: 1]: ").strip() or "1"
+        if objective_choice not in ("1", "2"):
+            raise ValueError("invalid objective")
+        target_cl, max_cd = None, None
+        if objective_choice == "1":
+            target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
+        else:
+            max_cd = float(input("Enter maximum drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
         
         max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
         num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
         seed_text = input("Enter random seed [default: random]: ").strip()
         seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
         
-        return target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels, seed
+        return target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd, max_height_box, chord, num_panels, seed
 
     except ValueError:
         print("\n[!] Invalid input. Please enter numerical values.")
@@ -67,7 +77,7 @@ def main():
     # Run all dependency and environment checks first
     perform_all_checks(require_xfoil=True)
 
-    from xfoil_optimizer import NacaOptimizer
+    from xfoil_optimizer import NacaOptimizer, MIN_CD, MAX_CL, CL_TOLERANCE
     from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
     from naca_core.optimization import print_phase
     from naca_core.panel_method import run_panel_analysis, surface_distributions
@@ -84,14 +94,21 @@ def main():
     if inputs is None:
         sys.exit(1)
 
-    target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels, seed = inputs
-    
+    (target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd,
+     max_height_box, chord, num_panels, seed) = inputs
+    objective = MIN_CD if objective_choice == "1" else MAX_CL
+
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
+    if objective == MIN_CD:
+        print(f"[i] Objective: minimum Cd with Cl = {target_cl} +/- {CL_TOLERANCE} (score = Cd in counts + penalty)")
+    else:
+        print(f"[i] Objective: maximum Cl with Cd <= {max_cd} (score = -Cl + penalty)")
 
     optimizer = NacaOptimizer(
         reynolds=target_reynolds,
         alpha=target_alpha,
+        objective=objective,
         target_cl=target_cl,
         max_cd=max_cd,
         mach=target_mach,
@@ -118,7 +135,8 @@ def main():
     print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_Cl{target_cl}"
+    objective_tag = f"Cl{target_cl}" if objective == MIN_CD else f"CdMax{max_cd}"
+    results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_{objective_tag}"
     results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
@@ -171,6 +189,10 @@ def main():
             print(f"XFOIL Viscous Cd: {final_cd:.5f}")
             if abs(final_alpha - target_alpha) > 1e-6:
                 print(f"[!] XFOIL converged only up to alpha = {final_alpha} deg (target {target_alpha} deg)")
+            if objective == MIN_CD and abs(final_cl - target_cl) > CL_TOLERANCE:
+                print(f"[!] Final Cl is outside the tolerance ({target_cl} +/- {CL_TOLERANCE})")
+            if objective == MAX_CL and final_cd > max_cd:
+                print(f"[!] Final Cd is above the limit ({max_cd})")
         else:
             print("[!] XFOIL did not converge on the final airfoil: viscous Cl and Cd not available")
         print(f"Potential Cl:     {panel_results['cl_potential']:.4f}")
