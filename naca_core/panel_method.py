@@ -24,50 +24,56 @@ def _calculate_geometry_parameters(XB, YB):
     return XC, YC, S, PSI
 
 def _calculate_influence_coefficients(XC, YC, XB, YB, PSI, S):
-    """Calculates the source and vortex influence coefficients."""
+    """
+    Calculates the source and vortex influence coefficients.
+
+    Row i = control point where the velocity is evaluated, column j = panel that induces it.
+    The formulas are the same as the original double loop, evaluated for all (i, j) pairs at
+    once with NumPy arrays. The diagonal (i == j) is zero, as in the loop.
+    """
     num_panels = len(XC)
-    I = np.zeros((num_panels, num_panels))
-    J = np.zeros((num_panels, num_panels))
-    K = np.zeros((num_panels, num_panels))
-    L = np.zeros((num_panels, num_panels))
-    
-    for i in range(num_panels):
-        for j in range(num_panels):
-            if i == j:
-                continue
+    XC = np.asarray(XC, dtype=float)[:, None]
+    YC = np.asarray(YC, dtype=float)[:, None]
+    XBj = np.asarray(XB, dtype=float)[None, :num_panels]
+    YBj = np.asarray(YB, dtype=float)[None, :num_panels]
+    PSI = np.asarray(PSI, dtype=float)
+    PSIi, PSIj = PSI[:, None], PSI[None, :]
+    Sj = np.asarray(S, dtype=float)[None, :]
 
-            A = -(XC[i]-XB[j])*_cosd(PSI[j]) - (YC[i]-YB[j])*_sind(PSI[j])
-            B = (XC[i]-XB[j])**2 + (YC[i]-YB[j])**2
-            E = math.sqrt(max(B - A**2, 0)) # Ensure non-negative for sqrt
+    dx = XC - XBj
+    dy = YC - YBj
+    cos_i, sin_i = _cosd(PSIi), _sind(PSIi)
+    cos_j, sin_j = _cosd(PSIj), _sind(PSIj)
 
-            # Vortex-induced normal and tangential velocities
-            Cn_v = -_cosd(PSI[i]-PSI[j])
-            Dn_v = (XC[i]-XB[j])*_cosd(PSI[i]) + (YC[i]-YB[j])*_sind(PSI[i])
-            Ct_v = _sind(PSI[j]-PSI[i])
-            Dt_v = (XC[i]-XB[j])*_sind(PSI[i]) - (YC[i]-YB[j])*_cosd(PSI[i])
-            
-            term1_v = 0.5 * Cn_v * math.log((S[j]**2 + 2*A*S[j] + B) / B)
-            term2_v = ((Dn_v - A*Cn_v) / E) * (math.atan2(S[j]+A, E) - math.atan2(A, E)) if E != 0 else 0
-            K[i, j] = term1_v + term2_v
-            
-            term1_l = 0.5*Ct_v*math.log((S[j]**2 + 2*A*S[j] + B)/B)
-            term2_l = ((Dt_v - A*Ct_v) / E) * (math.atan2(S[j]+A, E) - math.atan2(A, E)) if E != 0 else 0
-            L[i,j] = term1_l + term2_l
+    A = -dx * cos_j - dy * sin_j
+    B = dx**2 + dy**2
+    E = np.sqrt(np.maximum(B - A**2, 0))  # Ensure non-negative for sqrt
 
-            # Source-induced normal and tangential velocities
-            Cn_s = _sind(PSI[i]-PSI[j])
-            Dn_s = -(XC[i]-XB[j])*_sind(PSI[i]) + (YC[i]-YB[j])*_cosd(PSI[i])
-            
-            term1_i = 0.5 * Cn_s * math.log((S[j]**2 + 2*A*S[j] + B) / B)
-            term2_i = ((Dn_s - A*Cn_s) / E) * (math.atan2(S[j]+A, E) - math.atan2(A, E)) if E != 0 else 0
-            I[i, j] = term1_i + term2_i
-            
-            Ct_s = -_cosd(PSI[i]-PSI[j])
-            Dt_s = (XC[i]-XB[j])*_cosd(PSI[i]) + (YC[i]-YB[j])*_sind(PSI[i])
+    off_diag = ~np.eye(num_panels, dtype=bool)
+    log_term = np.zeros_like(B)
+    log_term[off_diag] = np.log(((Sj**2 + 2*A*Sj + B) / B)[off_diag])
+    atan_term = np.arctan2(Sj + A, E) - np.arctan2(A, E)
+    # Where E == 0 the second term is zero (as in the loop): divide only where E != 0
+    atan_over_E = np.divide(atan_term, E, out=np.zeros_like(E), where=(E != 0) & off_diag)
 
-            term1_j = 0.5 * Ct_s * math.log((S[j]**2 + 2*A*S[j] + B) / B)
-            term2_j = ((Dt_s - A*Ct_s) / E) * (math.atan2(S[j]+A, E) - math.atan2(A, E)) if E != 0 else 0
-            J[i, j] = term1_j + term2_j
+    # Vortex-induced normal and tangential velocities
+    Cn_v = -_cosd(PSIi - PSIj)
+    Dn_v = dx * cos_i + dy * sin_i
+    Ct_v = _sind(PSIj - PSIi)
+    Dt_v = dx * sin_i - dy * cos_i
+    K = 0.5 * Cn_v * log_term + (Dn_v - A * Cn_v) * atan_over_E
+    L = 0.5 * Ct_v * log_term + (Dt_v - A * Ct_v) * atan_over_E
+
+    # Source-induced normal and tangential velocities
+    Cn_s = _sind(PSIi - PSIj)
+    Dn_s = -dx * sin_i + dy * cos_i
+    Ct_s = -_cosd(PSIi - PSIj)
+    Dt_s = dx * cos_i + dy * sin_i
+    I = 0.5 * Cn_s * log_term + (Dn_s - A * Cn_s) * atan_over_E
+    J = 0.5 * Ct_s * log_term + (Dt_s - A * Ct_s) * atan_over_E
+
+    for M in (I, J, K, L):
+        np.fill_diagonal(M, 0.0)
 
     return I, J, K, L
 
@@ -108,7 +114,35 @@ def _calculate_surface_velocities(lambda_src, gamma, J, L, PSI, alpha_deg):
     Cp = 1 - (Vt**2)
     return Vt, Cp
 
-def run_panel_analysis(XB, YB, alpha_deg):
+def surface_distributions(panel_results):
+    """
+    Splits Cp into upper and lower surface and aligns them on the same x/c.
+
+    For cambered airfoils the upper and lower control points with the same index
+    are not at the same x/c, so the lower-surface Cp is linearly interpolated at
+    the upper-surface control points before computing Delta Cp.
+
+    Args:
+        panel_results (dict): The results dictionary from `run_panel_analysis`.
+
+    Returns:
+        tuple: (x_upper, cp_upper, cp_lower, delta_cp), ordered from LE to TE,
+            where cp_lower is evaluated at x_upper and delta_cp = cp_lower - cp_upper.
+    """
+    n_half = panel_results['num_panels'] // 2
+    XC = np.asarray(panel_results['XC'])
+    Cp = np.asarray(panel_results['Cp'])
+
+    x_upper, cp_upper = XC[n_half:], Cp[n_half:]
+    x_lower, cp_lower = XC[:n_half], Cp[:n_half]
+
+    order = np.argsort(x_lower)  # np.interp needs increasing x
+    cp_lower_at_upper = np.interp(x_upper, x_lower[order], cp_lower[order])
+
+    return x_upper, cp_upper, cp_lower_at_upper, cp_lower_at_upper - cp_upper
+
+
+def run_panel_analysis(XB, YB, alpha_deg, verbose=True):
     """
     Runs a complete panel method analysis for a given airfoil geometry and angle of attack.
 
@@ -116,6 +150,7 @@ def run_panel_analysis(XB, YB, alpha_deg):
         XB (np.ndarray): Airfoil X-coordinates (expected to be TE -> LE -> TE).
         YB (np.ndarray): Airfoil Y-coordinates.
         alpha_deg (float): Angle of attack in degrees.
+        verbose (bool): Whether to print output.
 
     Returns:
         dict: A dictionary containing the results:
@@ -127,7 +162,8 @@ def run_panel_analysis(XB, YB, alpha_deg):
     XB = XB[::-1]
     YB = YB[::-1]
     
-    print("\n[+] Starting Panel Method Simulation (Sources + Vortices)...")
+    if verbose:
+        print("\n[+] Starting Panel Method Simulation (Sources + Vortices)...")
     
     # 1. Calculate geometry parameters
     XC, YC, S, PSI = _calculate_geometry_parameters(XB, YB)
@@ -146,7 +182,8 @@ def run_panel_analysis(XB, YB, alpha_deg):
     gamma_total = gamma * perimeter
     cl_potential = -2 * gamma_total  # Based on Kutta-Joukowski theorem L = -rho*V*Gamma
     
-    print(f"    Potential Lift Coefficient (CL): {cl_potential:.4f}")
+    if verbose:
+        print(f"    Potential Lift Coefficient (CL): {cl_potential:.4f}")
     
     return {
         'cl_potential': cl_potential,

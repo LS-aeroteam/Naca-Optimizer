@@ -64,7 +64,7 @@ def naca4_airfoil(m_param, p_param, t_param, chord=1.0, num_points=100):
     
     return X, Y, (xu, yu, xl, yl)
 
-def save_airfoil_coordinates(X, Y, filename):
+def save_airfoil_coordinates(X, Y, filename, header=None):
     """
     Saves airfoil coordinates to a file in the format expected by XFOIL.
 
@@ -72,7 +72,11 @@ def save_airfoil_coordinates(X, Y, filename):
         X (np.ndarray): X coordinates.
         Y (np.ndarray): Y coordinates.
         filename (str): The path to the output file.
+        header (str, optional): Airfoil name written on the first line.
+            XFOIL reads a non-numeric first line as the airfoil name.
     """
     with open(filename, "w") as f:
+        if header:
+            f.write(f"{header}\n")
         for i in range(len(X)):
-            f.write(f"{X[i]:.6f} {Y[i]:.6f}")
+            f.write(f"{X[i]:.6f} {Y[i]:.6f}\n")

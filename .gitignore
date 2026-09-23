@@ -11,6 +11,5 @@ venv/
 xfoil.exe
 /xfoil_viscous_optimizer/xfoil
 
-# Optional: ignore new run outputs and keep only the committed examples
-# (uncomment only if you both agree; force-add examples with `git add -f`)
-# Results/
+# Run outputs: every run creates its own folder under Results/. They are not versioned.
+Results/

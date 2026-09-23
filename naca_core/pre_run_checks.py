@@ -6,6 +6,10 @@ import zipfile
 import tempfile
 import subprocess
 
+# XFOIL is looked for (and downloaded to) the XFOIL solver folder, not the repository root.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+XFOIL_DIR = os.path.join(REPO_ROOT, "xfoil_viscous_optimizer")
+
 # --- Python Library Checks ---
 
 def check_python_libraries():
@@ -17,7 +21,8 @@ def check_python_libraries():
     required_libraries = {
         "numpy": "for numerical operations",
         "scipy": "for optimization functions",
-        "matplotlib": "for plotting results"
+        "matplotlib": "for plotting results",
+        "ezdxf": "for the DXF export (CAD)"
     }
     
     missing_libs = []
@@ -30,7 +35,12 @@ def check_python_libraries():
             missing_libs.append(lib)
             
     if missing_libs:
-        print("\n[i] Missing libraries detected. Attempting to install them automatically...")
+        print(f"\n[i] Missing libraries: {', '.join(missing_libs)}")
+        answer = input("    Install them now with pip? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("\n[!] Install them manually, then run the script again:")
+            print(f"    python -m pip install -r \"{os.path.join(REPO_ROOT, 'requirements.txt')}\"")
+            sys.exit(1)
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_libs)
             print("    [+] Successfully installed missing libraries.\n")
@@ -43,27 +53,30 @@ def check_python_libraries():
 
 # --- XFOIL Executable Check ---
 
-def find_xfoil_executable():
+def find_xfoil_executable(verbose=False):
     """
-    Searches for the XFOIL executable in the project root and system PATH.
+    Searches for the XFOIL executable in the XFOIL solver folder and in the system PATH.
+
+    Args:
+        verbose (bool): Print where the executable was found (used only by the start-up check).
 
     Returns:
         str: The full path to the XFOIL executable if found, otherwise None.
     """
     xfoil_name = "xfoil.exe" if os.name == 'nt' else "xfoil"
 
-    # 1. Check in the project's root directory (one level up from this file's package)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    local_path = os.path.join(project_root, xfoil_name)
+    # 1. Check in the XFOIL solver folder
+    local_path = os.path.join(XFOIL_DIR, xfoil_name)
     if os.path.isfile(local_path):
-        print(f"    - Found XFOIL executable in project root: {local_path}")
+        if verbose:
+            print(f"    - Found XFOIL executable in the XFOIL solver folder: {local_path}")
         return local_path
     
     # 2. Check in system's PATH
     system_path = shutil.which(xfoil_name)
     if system_path:
-        print(f"    - Found XFOIL executable in system PATH: {system_path}")
+        if verbose:
+            print(f"    - Found XFOIL executable in system PATH: {system_path}")
         return system_path
         
     return None
@@ -75,7 +88,7 @@ def check_xfoil():
     Exits the program if XFOIL cannot be found or downloaded.
     """
     print("[+] Checking for XFOIL executable...")
-    xfoil_path = find_xfoil_executable()
+    xfoil_path = find_xfoil_executable(verbose=True)
     
     if xfoil_path is None:
         print("\n[!] XFOIL executable not found.")
@@ -84,8 +97,6 @@ def check_xfoil():
             print("    [i] Attempting to download XFOIL automatically for Windows...")
             try:
                 url = "https://web.mit.edu/drela/Public/web/xfoil/XFOIL6.99.zip"
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                project_root = os.path.dirname(script_dir)
                 
                 with tempfile.TemporaryDirectory() as temp_dir:
                     zip_path = os.path.join(temp_dir, "xfoil.zip")
@@ -94,13 +105,13 @@ def check_xfoil():
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
                     
-                    # Find the exe in the extracted contents and move it to project root
+                    # Find the exe in the extracted contents and move it to the XFOIL solver folder
                     exe_found = False
                     for root, dirs, files in os.walk(temp_dir):
                         for file in files:
                             if file.lower() == 'xfoil.exe':
                                 src_exe = os.path.join(root, file)
-                                dest_exe = os.path.join(project_root, 'xfoil.exe')
+                                dest_exe = os.path.join(XFOIL_DIR, 'xfoil.exe')
                                 shutil.copy(src_exe, dest_exe)
                                 exe_found = True
                                 break
@@ -137,13 +148,19 @@ def check_xfoil():
     print("    XFOIL dependency check passed.\n")
 
 
-def perform_all_checks():
-    """Runs all pre-run checks for dependencies and environment."""
+def perform_all_checks(require_xfoil=False):
+    """
+    Runs all pre-run checks for dependencies and environment.
+
+    Args:
+        require_xfoil (bool): Also check (and on Windows download) the XFOIL executable.
+    """
     print("======================================================================")
     print("               RUNNING PRE-FLIGHT ENVIRONMENT CHECKS")
     print("======================================================================")
     check_python_libraries()
-    check_xfoil()
+    if require_xfoil:
+        check_xfoil()
     print("======================================================================")
     print("                  ALL CHECKS PASSED. SYSTEM IS READY.")
     print("======================================================================")

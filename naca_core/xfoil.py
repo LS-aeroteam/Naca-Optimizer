@@ -10,13 +10,20 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 class XFoilAnalysis:
     """A wrapper for running an XFOIL analysis."""
 
-    def __init__(self, airfoil_name="airfoil", alpha=0.0, reynolds=1e6, mach=0.0, ncrit=9.0):
+    def __init__(self, airfoil_name="airfoil", alpha=0.0, reynolds=1e6, mach=0.0, ncrit=9.0, viscous=True):
+        """
+        Args:
+            viscous (bool): True = viscous analysis at the given Reynolds number (default),
+                False = inviscid analysis (Reynolds and Ncrit are not used).
+        """
+        self.viscous = viscous
         self.airfoil_name = airfoil_name
         self.alpha = alpha
         self.reynolds = reynolds
         self.mach = mach
         self.ncrit = ncrit
         self.xfoil_exe = find_xfoil_executable()
+        self.last_error = None  # "timeout" if the last run was stopped by the time limit
 
     def run_analysis(self, X, Y):
         """
@@ -29,7 +36,8 @@ class XFoilAnalysis:
         Returns:
             tuple: A tuple containing (Cl, Cd, achieved_alpha). Returns (None, None, None) on failure.
         """
-        if not os.path.exists(self.xfoil_exe):
+        self.last_error = None
+        if not self.xfoil_exe or not os.path.exists(self.xfoil_exe):
             logging.error(f"XFOIL executable not found at '{self.xfoil_exe}'. Aborting analysis.")
             return None, None, None
             
@@ -38,8 +46,10 @@ class XFoilAnalysis:
             polar_file = os.path.join(temp_dir, "polar.dat")
             xfoil_input_file = os.path.join(temp_dir, "xfoil_input.in")
 
-            # Save airfoil to file
+            # Save airfoil to file. The first line is the name: without it XFOIL asks for a name
+            # after LOAD and takes the next command of the script as the answer.
             with open(airfoil_file, "w") as f:
+                f.write(f"{self.airfoil_name}\n")
                 for i in range(len(X)):
                     f.write(f"{X[i]:.6f} {Y[i]:.6f}\n")
 
@@ -61,7 +71,8 @@ class XFoilAnalysis:
                 logging.error(f"XFOIL executable not found at '{self.xfoil_exe}'. Ensure it is in the correct path.")
                 return None, None, None
             except subprocess.TimeoutExpired:
-                logging.warning("XFOIL process timed out. Airfoil may not have converged.")
+                # Reported by the caller (e.g. "Timeout" in the optimization table)
+                self.last_error = "timeout"
                 return None, None, None
             except Exception as e:
                 logging.error(f"An unexpected error occurred while running XFOIL: {e}")
@@ -75,16 +86,22 @@ class XFoilAnalysis:
         input_filename = os.path.basename(airfoil_file)
         
         with open(os.path.join(os.path.dirname(airfoil_file), "xfoil_input.in"), "w") as f:
+            # Disable XFOIL graphics: no plot windows, and no crash on systems without a display
+            f.write("PLOP\nG\n\n")
+            # No PANE: XFOIL analyses the given points directly, so the number of panels
+            # chosen by the user (and the same paneling as the in-house panel method) is used.
             f.write(f"LOAD {input_filename}\n")
-            f.write("PANE\n")
             f.write("OPER\n")
-            f.write(f"Visc {self.reynolds}\n")
+            if self.viscous:
+                f.write(f"Visc {self.reynolds}\n")
             f.write(f"Mach {self.mach}\n")
-            f.write("VPAR\n")
-            f.write(f"N {self.ncrit}\n\n")
+            if self.viscous:
+                f.write("VPAR\n")
+                f.write(f"N {self.ncrit}\n\n")
             f.write("ITER 500\n")
             f.write("PACC\n")
-            f.write(f"{polar_file}\n\n") # Use a clean polar file
+            # XFOIL runs inside the temporary folder (cwd), so the bare file name is enough
+            f.write(f"{os.path.basename(polar_file)}\n\n")
             
             # Sequence of angles to approach the target alpha
             if self.alpha == 0.0:

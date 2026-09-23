@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .panel_method import surface_distributions
+
 def plot_airfoil_geometry(X, Y, title="Airfoil Geometry", **kwargs):
     """
     Plots the geometry of the airfoil.
@@ -64,20 +66,8 @@ def plot_lift_distribution(panel_results, alpha_deg, naca_name="", **kwargs):
         alpha_deg (float): The angle of attack for the title.
         naca_name (str): Optional name of the airfoil for the title.
     """
-    Cp = panel_results['Cp']
-    XC = panel_results['XC']
-    num_panels = panel_results['num_panels']
-    n_half = int(num_panels / 2)
-
-    x_lower = XC[:n_half]
-    cp_lower = Cp[:n_half]
-    x_upper = XC[n_half:]
-    cp_upper = Cp[n_half:]
-
-    # x_upper goes from LE to TE. x_lower goes from TE to LE. 
-    # Reverse lower to align with upper.
-    x_aligned = x_upper
-    delta_cp = cp_lower[::-1] - cp_upper
+    # Lower-surface Cp is interpolated at the upper-surface x/c (see surface_distributions)
+    x_aligned, _, _, delta_cp = surface_distributions(panel_results)
 
     plt.figure(figsize=(10, 6))
     plt.plot(x_aligned, delta_cp, 'g-o', markersize=3, linewidth=1.5, label=r'$\Delta C_p$ (Lift Distribution)')
@@ -103,8 +93,10 @@ def plot_optimization_history(history, **kwargs):
         print("History is empty, cannot generate plot.")
         return
 
-    # Filter out rows with non-numeric data (e.g., 'Failed', 'Bounds') and convert to numpy array
-    history_np = np.array([row for row in history if isinstance(row[4], (int, float))], dtype=float)
+    # Keep only successful evaluations (numeric Cl) and the numeric columns used here:
+    # Eval, m, p, t, Score (Cd can be empty for the in-house solver)
+    history_np = np.array([[row[0], row[1], row[2], row[3], row[6]]
+                           for row in history if isinstance(row[4], (int, float))], dtype=float)
     if history_np.shape[0] == 0:
         print("No successful evaluations in history, cannot generate plot.")
         return
@@ -113,7 +105,7 @@ def plot_optimization_history(history, **kwargs):
     m = history_np[:, 1]
     p = history_np[:, 2]
     t = history_np[:, 3]
-    scores = history_np[:, 6]
+    scores = history_np[:, 4]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 
@@ -129,12 +121,17 @@ def plot_optimization_history(history, **kwargs):
     # Plot 2: Objective Function Score
     ax2.plot(eval_count, scores, 'k-o', markersize=3, label='Objective Score')
     ax2.set_xlabel('Evaluation Number')
-    ax2.set_ylabel('Score (log scale)')
-    ax2.set_yscale('log')
+    if np.all(scores > 0):
+        ax2.set_ylabel('Score (log scale)')
+        ax2.set_yscale('log')
+    else:
+        # Negative scores (maximum-Cl objective): symmetric log scale
+        ax2.set_ylabel('Score (symlog scale)')
+        ax2.set_yscale('symlog', linthresh=1e-2)
     ax2.grid(True)
     ax2.legend()
     
     plt.tight_layout()
     if 'save_path' in kwargs:
-        plt.savefig(kwargs['save_path'], format='png', bbox_inches='tight')
+        plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
     plt.close()
