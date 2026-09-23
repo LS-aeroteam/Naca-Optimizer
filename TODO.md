@@ -16,8 +16,6 @@
 
 - [ ]  **Inizializzazione Seed**: Definire la policy per il seed del generatore (valutare seed fisso per riproducibilità dei test vs casuale per esplorazione completa dello spazio).
 - [ ]  **Tuning Obiettivo 2**: Ricalibrare il limite di Cd di default (la soglia attuale di 0.02 a 4° risulta matematicamente ininfluente sull'ottimizzazione).
-- [x]  **Programma unico** (fatto nella PR #22): Unificare i due `run.py` in un unico entry point con selezione del solutore all'avvio (in-house / XFOIL). I due file sono oggi quasi identici: le differenze reali sono il controllo di XFOIL, le domande sull'obiettivo e i risultati finali a video. Da fare prima dello strato limite: quando l'in-house calcolerà il Cd, i due flussi diventeranno identici.
-- [x]  **Cartella risultati unica** (fatto nella PR #22): Spostare l'output in una singola cartella `Results/` in radice, con nome `Re<Re>_Alpha<alpha>_<obiettivo>_<solutore>_seed<N>` e suffissi `_inhouse` / `_xfoil`.
 - [ ]  **Selezione solutore da CLI**: Valutare se affiancare alla domanda interattiva un'opzione da riga di comando (es. `--solver xfoil`), utile per lanciare più casi in automatico.
 - [ ]  **Test di non regressione sul terminale**: Valutare se rendere permanente il confronto dell'output prima/dopo (a seme fisso) come test in `tests/`, oltre alla baseline numerica esistente.
 - [ ]  **Penalità di Cl nell'obiettivo 1**: Con la penalità quadratica uscire di poco dalla tolleranza di Cl costa meno del Cd risparmiato (0.0003 fuori tolleranza = 9 drag count): con seme 657086 il Cl finale è 0.7947 invece di 0.8 ± 0.005. Valutare una penalità lineare o un peso maggiore. Cambia i risultati: da decidere insieme.
