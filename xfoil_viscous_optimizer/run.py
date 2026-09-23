@@ -65,8 +65,10 @@ def get_user_input():
         num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
         seed_text = input("Enter random seed [default: random]: ").strip()
         seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
+        span_text = input(f"Enter span for the 3D export (m) [default: {chord} = chord]: ").strip()
+        span = float(span_text) if span_text else chord
         
-        return target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd, max_height_box, chord, num_panels, seed
+        return target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd, max_height_box, chord, num_panels, seed, span
 
     except ValueError:
         print("\n[!] Invalid input. Please enter numerical values.")
@@ -80,6 +82,7 @@ def main():
     from xfoil_optimizer import NacaOptimizer, MIN_CD, MAX_CL, CL_TOLERANCE
     from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
     from naca_core.optimization import print_phase
+    from naca_core.export import export_all
     from naca_core.panel_method import run_panel_analysis, surface_distributions
     from naca_core.xfoil import XFoilAnalysis
     from naca_core.plotting import (
@@ -95,7 +98,7 @@ def main():
         sys.exit(1)
 
     (target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd,
-     max_height_box, chord, num_panels, seed) = inputs
+     max_height_box, chord, num_panels, seed, span) = inputs
     objective = MIN_CD if objective_choice == "1" else MAX_CL
 
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
@@ -219,6 +222,14 @@ def main():
 
             for i in range(len(x_upper)):
                 writer.writerow([f"{x_upper[i]:.6f}", f"{cp_upper[i]:.6f}", f"{cp_lower[i]:.6f}", f"{delta_cp[i]:.6f}"])
+
+        # --- CAD / ParaView / OpenFOAM export ---
+        print("\n[+] Exporting files for CAD, ParaView and OpenFOAM...")
+        export_paths = export_all(X_opt, Y_opt, panel_results, chord, span, results_dir,
+                                  name=f"airfoil_NACA_{naca_opt_str}")
+        print(f"    - CAD (mm):        {os.path.basename(export_paths['dxf'])}, {os.path.basename(export_paths['csv'])}")
+        print(f"    - ParaView (m):    {os.path.basename(export_paths['vtk'])}")
+        print(f"    - OpenFOAM/3D (m): {os.path.basename(export_paths['stl'])} (span {span} m)")
 
         print(f"\n[+] Analysis complete. All plots and CSV saved in '{results_dir}/'")
 

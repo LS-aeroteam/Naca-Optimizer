@@ -40,6 +40,8 @@ Every evaluation starts XFOIL, so a run is slower than the in-house one: with th
 
 `Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/` (objective 1) or `.../Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/` (objective 2), with the same files as the in-house optimizer plus the XFOIL Cl and Cd in the aerodynamic CSV.
 
+The `export/` subfolder contains the airfoil ready for CAD (DXF, CSV in mm), ParaView (VTK) and OpenFOAM (STL): see "Using the exported files" in the main README.
+
 ## More
 
 What every symbol, message and value means, and why each value was chosen: [Reference](../README.md#reference) in the main README.
