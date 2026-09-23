@@ -1,5 +1,5 @@
-from naca_core.optimization import BaseNacaOptimizer
-from naca_core.panel_method import run_panel_analysis
+from .optimization import BaseNacaOptimizer
+from .panel_method import run_panel_analysis
 
 
 class NacaOptimizer(BaseNacaOptimizer):
