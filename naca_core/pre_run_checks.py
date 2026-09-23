@@ -6,9 +6,9 @@ import zipfile
 import tempfile
 import subprocess
 
-# XFOIL is looked for (and downloaded to) the XFOIL solver folder, not the repository root.
+# XFOIL is looked for (and downloaded to) naca_core/bin/, a folder that is not versioned.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-XFOIL_DIR = os.path.join(REPO_ROOT, "xfoil_viscous_optimizer")
+XFOIL_DIR = os.path.join(REPO_ROOT, "naca_core", "bin")
 
 # --- Python Library Checks ---
 
@@ -55,7 +55,7 @@ def check_python_libraries():
 
 def find_xfoil_executable(verbose=False):
     """
-    Searches for the XFOIL executable in the XFOIL solver folder and in the system PATH.
+    Searches for the XFOIL executable in naca_core/bin/ and in the system PATH.
 
     Args:
         verbose (bool): Print where the executable was found (used only by the start-up check).
@@ -65,11 +65,11 @@ def find_xfoil_executable(verbose=False):
     """
     xfoil_name = "xfoil.exe" if os.name == 'nt' else "xfoil"
 
-    # 1. Check in the XFOIL solver folder
+    # 1. Check in naca_core/bin/
     local_path = os.path.join(XFOIL_DIR, xfoil_name)
     if os.path.isfile(local_path):
         if verbose:
-            print(f"    - Found XFOIL executable in the XFOIL solver folder: {local_path}")
+            print(f"    - Found XFOIL executable in naca_core/bin: {local_path}")
         return local_path
     
     # 2. Check in system's PATH
@@ -105,12 +105,13 @@ def check_xfoil():
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
                     
-                    # Find the exe in the extracted contents and move it to the XFOIL solver folder
+                    # Find the exe in the extracted contents and copy it to naca_core/bin/
                     exe_found = False
                     for root, dirs, files in os.walk(temp_dir):
                         for file in files:
                             if file.lower() == 'xfoil.exe':
                                 src_exe = os.path.join(root, file)
+                                os.makedirs(XFOIL_DIR, exist_ok=True)
                                 dest_exe = os.path.join(XFOIL_DIR, 'xfoil.exe')
                                 shutil.copy(src_exe, dest_exe)
                                 exe_found = True

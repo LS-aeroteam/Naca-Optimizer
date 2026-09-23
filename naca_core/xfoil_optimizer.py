@@ -1,5 +1,5 @@
-from naca_core.optimization import BaseNacaOptimizer
-from naca_core.xfoil import XFoilAnalysis
+from .optimization import BaseNacaOptimizer
+from .xfoil import XFoilAnalysis
 
 # Largest accepted difference between the angle XFOIL converged at and the target angle (deg)
 ALPHA_TOLERANCE = 0.1
