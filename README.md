@@ -47,7 +47,7 @@ Each airfoil is built from three numbers:
 Points are placed with cosine spacing, so there are more of them near the leading and trailing edge, where the flow changes fastest.
 
 ### 2. Aerodynamics
-- **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own source strength and all panels share one vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
+- **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own (uniformally distributed) source strength and all panels share one (uniformally distributed) vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
 - **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). To help convergence, the angle of attack is reached in 1° steps before the target value.
 
 ### 3. Optimization
