@@ -43,17 +43,24 @@ def plot_validation_results(results_dict, results_subfolder):
     # --- Error breakdown vs alpha ---
     fig, axes = plt.subplots(1, n, figsize=(5 * n, 4.5), squeeze=False)
     for ax, (profile_name, data) in zip(axes[0], results_dict.items()):
-        rows = [d for d in data if d['dCl_Numerical'] is not None]
-        if rows:
-            a = [d['Alpha'] for d in rows]
-            ax.plot(a, [d['dCl_Total'] for d in rows], 'k-o', markersize=4, label='Total')
-            ax.plot(a, [d['dCl_Numerical'] for d in rows], 's--', markersize=4, label='Numerical')
-            ax.plot(a, [d['dCl_Mach'] for d in rows], '^--', markersize=4, label='Mach')
-            ax.plot(a, [d['dCl_Viscosity'] for d in rows], 'v--', markersize=4, label='Viscosity')
+        alphas = [d['Alpha'] for d in data]
+        for key, marker, linestyle, color, label in (('dCl_Total', 'o', '-', 'black', 'Total'),
+                                                     ('dCl_Numerical', 's', '--', 'tab:blue', 'Numerical'),
+                                                     ('dCl_Mach', '^', '--', 'tab:orange', 'Mach'),
+                                                     ('dCl_Viscosity', 'v', '--', 'tab:green', 'Viscosity')):
+            # NaN for missing values: the line is interrupted instead of joining the points around a gap
+            values = [d[key] if d[key] is not None else float('nan') for d in data]
+            ax.plot(alphas, values, marker=marker, linestyle=linestyle, color=color, markersize=4, label=label)
+            # Points computed with a single order (Mach first / visc first): hollow marker
+            if key in ('dCl_Mach', 'dCl_Viscosity'):
+                fallback = [d for d in data if d[key] is not None and d['Breakdown'] != 'average']
+                if fallback:
+                    ax.plot([d['Alpha'] for d in fallback], [d[key] for d in fallback], linestyle='none',
+                            marker=marker, markersize=9, markerfacecolor='none', markeredgecolor=color)
         ax.axhline(0.0, color='grey', linewidth=0.8)
         ax.set_title(profile_name)
-        ax.set_xlabel('Alpha (degrees)')
         ax.set_ylabel('dCl = in-house - reference')
+        ax.set_xlabel('Alpha (degrees)  -  hollow marker: single-order breakdown')
         ax.grid(True)
         ax.legend(fontsize=8)
     fig.tight_layout()
@@ -150,6 +157,8 @@ def main():
     print("    total = num + Mach + visc")
     print("    num  = in-house vs XFOIL inviscid at Mach 0 (numerical error of the panel method)")
     print("    Mach = compressibility effect, visc = boundary-layer effect (average of the two orders)")
+    print("    If an intermediate XFOIL run fails, a single order is used and the line is marked")
+    print("    (Mach first / visc first / Mach+visc combined).")
 
     for m, p, t, name in profiles:
         print(f"\n--- Processing Profile NACA {name} ---")
@@ -184,14 +193,27 @@ def main():
                         cd_visc = cd_run
 
             # --- Error breakdown ---
+            # Best method allowed by the runs that succeeded; the parts always add up to the total.
             A, B, C, D, E = cl_inhouse, cl['inv_M0'], cl['inv_M'], cl['visc_M'], cl['visc_M0']
             d_total = A - D if None not in (A, D) else None
-            d_num = d_mach = d_visc = None
-            if None not in (A, B, C, D, E):
+            d_num = d_mach = d_visc = d_mach_visc = None
+            breakdown = "N/A"
+            if None not in (A, B, D):
                 d_num = A - B
-                # Mach and viscosity interact: average of the two orders (Mach first / viscosity first)
-                d_mach = ((B - C) + (E - D)) / 2
-                d_visc = ((C - D) + (B - E)) / 2
+                d_mach_visc = B - D  # Mach and viscosity together
+                if C is not None and E is not None:
+                    # Mach and viscosity interact: average of the two orders
+                    d_mach = ((B - C) + (E - D)) / 2
+                    d_visc = ((C - D) + (B - E)) / 2
+                    breakdown = "average"
+                elif C is not None:
+                    d_mach, d_visc = B - C, C - D
+                    breakdown = "Mach first"
+                elif E is not None:
+                    d_visc, d_mach = B - E, E - D
+                    breakdown = "visc first"
+                else:
+                    breakdown = "Mach+visc combined"
 
             # Print quick result
             if cl_inhouse is None:
@@ -199,8 +221,12 @@ def main():
             status = "OK" if not problems else ", ".join(problems)
             ih_str = f"{A:.4f}" if A is not None else "N/A"
             xf_str = f"{D:.4f}" if D is not None else "N/A"
-            if d_num is not None:
+            if breakdown in ("average", "Mach first", "visc first"):
                 err_str = f"dCl total {d_total:+.4f} = num {d_num:+.4f} | Mach {d_mach:+.4f} | visc {d_visc:+.4f}"
+                if breakdown != "average":
+                    err_str += f" ({breakdown})"
+            elif breakdown == "Mach+visc combined":
+                err_str = f"dCl total {d_total:+.4f} = num {d_num:+.4f} | Mach+visc {d_mach_visc:+.4f} (Mach+visc combined)"
             elif d_total is not None:
                 err_str = f"dCl total {d_total:+.4f} (breakdown N/A)"
             else:
@@ -220,6 +246,8 @@ def main():
                 'dCl_Numerical': d_num,
                 'dCl_Mach': d_mach,
                 'dCl_Viscosity': d_visc,
+                'dCl_Mach_plus_Viscosity': d_mach_visc,
+                'Breakdown': breakdown,
             }
             
             all_results.append(res_dict)
