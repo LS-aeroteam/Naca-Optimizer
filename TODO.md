@@ -14,9 +14,12 @@
 
 ## ⚙️ Architettura I/O e Ottimizzazione
 
-- [ ]  **Export CAD**: Sviluppare la funzione di esportazione della geometria del profilo ottimizzato in formati CAD standard (es. STEP, IGES, o dat).
 - [ ]  **Inizializzazione Seed**: Definire la policy per il seed del generatore (valutare seed fisso per riproducibilità dei test vs casuale per esplorazione completa dello spazio).
 - [ ]  **Tuning Obiettivo 2**: Ricalibrare il limite di Cd di default (la soglia attuale di 0.02 a 4° risulta matematicamente ininfluente sull'ottimizzazione).
+- [ ]  **Programma unico**: Unificare i due `run.py` in un unico entry point con selezione del solutore all'avvio (in-house / XFOIL). I due file sono oggi quasi identici: le differenze reali sono il controllo di XFOIL, le domande sull'obiettivo e i risultati finali a video. Da fare prima dello strato limite: quando l'in-house calcolerà il Cd, i due flussi diventeranno identici.
+- [ ]  **Cartella risultati unica**: Spostare l'output in una singola cartella `Results/` in radice, con nome `Re<Re>_Alpha<alpha>_<obiettivo>_<solutore>_seed<N>` e suffissi `_inhouse` / `_xfoil`.
+- [ ]  **Selezione solutore da CLI**: Valutare se affiancare alla domanda interattiva un'opzione da riga di comando (es. `--solver xfoil`), utile per lanciare più casi in automatico.
+- [ ]  **Test di non regressione sul terminale**: Valutare se rendere permanente il confronto dell'output prima/dopo (a seme fisso) come test in `tests/`, oltre alla baseline numerica esistente.
 
 ## 📄 Gestione Repository
 
