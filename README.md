@@ -21,6 +21,7 @@ What every symbol, message and number means, and why each value was chosen, is e
 Naca-optimizer/
 ├── run.py                          # Start here: python run.py (you choose the solver)
 ├── naca_core/                      # All the code
+│   ├── __init__.py
 │   ├── panel_method.py             # In-house solver (source + vortex panel method)
 │   ├── xfoil.py                    # XFOIL solver: writes the script, runs XFOIL, reads the polar
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
@@ -32,9 +33,18 @@ Naca-optimizer/
 │   ├── pre_run_checks.py           # Library and XFOIL checks
 │   └── bin/                        # XFOIL executable (not versioned)
 ├── validation_inhouse_vs_xfoil/    # In-house vs XFOIL comparison
-│   └── run_validation.py
-├── Results/                        # Output folders (created by the scripts, not versioned)
+│   ├── run_validation.py
+│   └── README.md
 ├── tests/                          # Numerical baseline check
+│   ├── baseline_check.py
+│   └── baseline_reference.json
+├── Results/                        # Created by the scripts, not versioned
+│   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
+│   │   └── export/                 # CAD, ParaView and OpenFOAM files
+│   └── validation/
+│       └── Re<Re>_Mach<M>/         # one folder per validation run
+├── requirements.txt                # Python libraries: pip install -r requirements.txt
+├── TODO.md                         # Open items and planned work
 └── _Original_projects/             # Original MATLAB script and first Python version (reference only)
 ```
 
