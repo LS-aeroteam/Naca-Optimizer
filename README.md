@@ -147,9 +147,30 @@ cd validation_inhouse_vs_xfoil
 python run_validation.py
 ```
 
-It runs NACA 0012, 2412 and 4412 over an angle-of-attack sweep (default −4° to 10°, step 2°) with both solvers and prints the lift coefficient from each one.
+It runs NACA 0012, 2412 and 4412 over an angle-of-attack sweep (default −4° to 10°, step 2°) and explains **why** the in-house Cl differs from XFOIL.
 
-Keep in mind what is being compared: the in-house solver is potential flow, XFOIL here is viscous. A gap of a few percent in Cl is expected, because the boundary layer makes the real airfoil behave as if it had less camber. The gap tells you how much viscosity matters at your conditions; it is not only a numerical error.
+The reference is XFOIL viscous at the real Mach number. The in-house solver differs from it for three reasons, so for every angle XFOIL is run four times (inviscid and viscous, each at Mach 0 and at the real Mach) and the difference is split into three parts:
+
+```
+dCl total = in-house Cl − XFOIL viscous Cl (real Mach)
+          = num + Mach + visc
+```
+
+| Part | What it measures |
+|------|------------------|
+| `num` | Numerical error of the panel method: in-house vs XFOIL inviscid at Mach 0 (same physics) |
+| `Mach` | Compressibility, which the in-house solver ignores |
+| `visc` | Boundary layer, which the in-house solver ignores |
+
+A positive value means the in-house solver overestimates Cl. Mach and viscosity affect each other, so their parts are the average of the two possible orders (Mach first, viscosity first); the three parts always add up exactly to the total.
+
+Example output:
+
+```
+  > Alpha =  4.0 deg ... [OK] In-House Cl: 0.7359 | XFOIL Cl: 0.6892 | dCl total +0.0467 = num -0.0078 | Mach -0.0098 | visc +0.0643
+```
+
+Typically the boundary layer explains most of the difference: it makes the real airfoil behave as if it had less camber.
 
 ---
 
@@ -172,7 +193,13 @@ Results/Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/    (XFOIL, maximum-Cl ru
 | `optimization_history.svg` | How m, p, t and the score changed during the search |
 | `aerodynamic_data_NACA_xxxx.csv` | Global coefficients, exact m, p, t and Cp distribution |
 
-The validation script saves `validation_results.csv` and `validation_plot_cl.svg` in `Results/Validation_Re<Reynolds>_Mach<Mach>/`.
+The validation script saves in `Results/Validation_Re<Reynolds>_Mach<Mach>/`:
+
+| File | Content |
+|------|---------|
+| `validation_results.csv` | All Cl values (in-house and the four XFOIL runs), viscous Cd and the error parts |
+| `validation_plot_cl.svg` | Cl vs alpha for each airfoil: in-house, XFOIL inviscid (Mach 0), XFOIL viscous |
+| `validation_plot_error.svg` | Error parts vs alpha for each airfoil, with the total |
 
 ---
 

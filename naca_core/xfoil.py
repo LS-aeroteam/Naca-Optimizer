@@ -10,7 +10,13 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 class XFoilAnalysis:
     """A wrapper for running an XFOIL analysis."""
 
-    def __init__(self, airfoil_name="airfoil", alpha=0.0, reynolds=1e6, mach=0.0, ncrit=9.0):
+    def __init__(self, airfoil_name="airfoil", alpha=0.0, reynolds=1e6, mach=0.0, ncrit=9.0, viscous=True):
+        """
+        Args:
+            viscous (bool): True = viscous analysis at the given Reynolds number (default),
+                False = inviscid analysis (Reynolds and Ncrit are not used).
+        """
+        self.viscous = viscous
         self.airfoil_name = airfoil_name
         self.alpha = alpha
         self.reynolds = reynolds
@@ -86,10 +92,12 @@ class XFoilAnalysis:
             # chosen by the user (and the same paneling as the in-house panel method) is used.
             f.write(f"LOAD {input_filename}\n")
             f.write("OPER\n")
-            f.write(f"Visc {self.reynolds}\n")
+            if self.viscous:
+                f.write(f"Visc {self.reynolds}\n")
             f.write(f"Mach {self.mach}\n")
-            f.write("VPAR\n")
-            f.write(f"N {self.ncrit}\n\n")
+            if self.viscous:
+                f.write("VPAR\n")
+                f.write(f"N {self.ncrit}\n\n")
             f.write("ITER 500\n")
             f.write("PACC\n")
             # XFOIL runs inside the temporary folder (cwd), so the bare file name is enough
