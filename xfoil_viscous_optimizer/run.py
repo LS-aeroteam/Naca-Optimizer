@@ -1,16 +1,14 @@
 import os
 import csv
 import sys
-from xfoil_core.pre_run_checks import perform_all_checks
-from xfoil_core.optimizer import NacaOptimizer
-from xfoil_core.airfoil import naca4_airfoil, save_airfoil_coordinates
-from xfoil_core.panel_method import run_panel_analysis
-from xfoil_core.plotting import (
-    plot_airfoil_geometry, 
-    plot_pressure_coefficient, 
-    plot_lift_distribution,
-    plot_optimization_history
-)
+import random
+
+# Make the shared 'naca_core' package (repository root) importable from this folder
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Only the standard library is imported here: numpy/scipy/matplotlib are imported
+# inside main(), after perform_all_checks() has verified (or installed) them.
+from naca_core.pre_run_checks import perform_all_checks
 
 def get_fluid_selection():
     fluids = {
@@ -50,13 +48,27 @@ def get_user_input():
         print(f"    - Mach Number: {target_mach:.3f}")
 
         target_alpha = float(input("\nEnter target angle of attack (degrees) [e.g., 4.0]: ") or 4.0)
-        target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
-        max_cd = float(input("Enter maximum tolerable drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
+
+        print("\nSelect the optimization objective:")
+        print("1. Minimum Cd at a target Cl")
+        print("2. Maximum Cl with a Cd limit")
+        objective_choice = input("Choice (1 or 2) [default: 1]: ").strip() or "1"
+        if objective_choice not in ("1", "2"):
+            raise ValueError("invalid objective")
+        target_cl, max_cd = None, None
+        if objective_choice == "1":
+            target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
+        else:
+            max_cd = float(input("Enter maximum drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
         
         max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
         num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
+        seed_text = input("Enter random seed [default: random]: ").strip()
+        seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
+        span_text = input(f"Enter span for the 3D export (m) [default: {chord} = chord]: ").strip()
+        span = float(span_text) if span_text else chord
         
-        return target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels
+        return target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd, max_height_box, chord, num_panels, seed, span
 
     except ValueError:
         print("\n[!] Invalid input. Please enter numerical values.")
@@ -65,45 +77,69 @@ def get_user_input():
 def main():
     """Main execution block for the aerodynamic suite."""
     # Run all dependency and environment checks first
-    perform_all_checks()
-    
+    perform_all_checks(require_xfoil=True)
+
+    from xfoil_optimizer import NacaOptimizer, MIN_CD, MAX_CL, CL_TOLERANCE
+    from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+    from naca_core.optimization import print_phase
+    from naca_core.export import export_all
+    from naca_core.panel_method import run_panel_analysis, surface_distributions
+    from naca_core.xfoil import XFoilAnalysis
+    from naca_core.plotting import (
+        plot_airfoil_geometry,
+        plot_pressure_coefficient,
+        plot_lift_distribution,
+        plot_optimization_history
+    )
+
     # Get aerodynamic targets from the user
     inputs = get_user_input()
     if inputs is None:
         sys.exit(1)
 
-    target_reynolds, target_mach, target_alpha, target_cl, max_cd, max_height_box, chord, num_panels = inputs
-    
+    (target_reynolds, target_mach, target_alpha, objective_choice, target_cl, max_cd,
+     max_height_box, chord, num_panels, seed, span) = inputs
+    objective = MIN_CD if objective_choice == "1" else MAX_CL
+
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
-    print("\n======================================================================")
-    print("                PHASE 1: AIRFOIL OPTIMIZATION")
-    print("======================================================================")
-    initial_guess = [0.02, 0.4, 0.12]  # Start with a NACA 2412
-    bounds = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)] # Sensible bounds for NACA 4-digits
+    print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
+    if objective == MIN_CD:
+        print(f"[i] Objective: minimum Cd with Cl = {target_cl} +/- {CL_TOLERANCE} (score = Cd in counts + penalty)")
+    else:
+        print(f"[i] Objective: maximum Cl with Cd <= {max_cd} (score = -Cl + penalty)")
 
     optimizer = NacaOptimizer(
         reynolds=target_reynolds,
         alpha=target_alpha,
+        objective=objective,
         target_cl=target_cl,
         max_cd=max_cd,
         mach=target_mach,
         chord=chord,
-        max_height_box=max_height_box
+        max_height_box=max_height_box,
+        num_panels=num_panels,
+        seed=seed
     )
 
-    result = optimizer.optimize(initial_guess, bounds, max_iter=50)
+    result = optimizer.optimize(max_iter=50)
 
-    if not result.success and result.nfev == 0:
-        print("\n[!] Optimization failed to start. Please check your XFOIL setup and input parameters.")
+    # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
+    history = optimizer.get_optimization_history()
+    if not any(isinstance(row[4], float) for row in history):
+        print("\n[!] No airfoil could be analysed successfully, so there is no valid result.")
+        print("    Check the solver setup and the input values, then run again.")
         return
         
     # --- Process and Save Optimization Results ---
     opt_m, opt_p, opt_t = result.x
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
     print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
+    print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
+    print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_dir_name = f"Results_Re{int(target_reynolds)}_Alpha{target_alpha}_Cl{target_cl}"
+    objective_tag = f"Cl{target_cl}" if objective == MIN_CD else f"CdMax{max_cd}"
+    results_dir_name = f"Results_Re{int(round(target_reynolds))}_Alpha{target_alpha}_{objective_tag}"
     results_dir = os.path.join(base_dir, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
@@ -111,10 +147,10 @@ def main():
     # Save optimized airfoil coordinates
     X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
     airfoil_filename = os.path.join(results_dir, f"airfoil_NACA_{naca_opt_str}.dat")
-    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename)
+    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename,
+                             header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
 
     # Save optimization history
-    history = optimizer.get_optimization_history()
     history_filename = os.path.join(results_dir, "optimization_history.csv")
     with open(history_filename, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -126,9 +162,7 @@ def main():
     plot_optimization_history(history, save_path=history_plot_filename)
     
     # --- PHASE 2: AIRFOIL ANALYSIS ---
-    print("\n======================================================================")
-    print("           PHASE 2: AIRFOIL ANALYSIS")
-    print("======================================================================")
+    print_phase("PHASE 2: AIRFOIL ANALYSIS")
     
     print("\n[+] Generating plots and extracting final aerodynamic data...")
 
@@ -137,24 +171,33 @@ def main():
     plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: NACA {naca_opt_str}", save_path=airfoil_plot_filename)
     
     # --- PHASE 3: POTENTIAL & PRESSURE ANALYSIS ---
-    print("\n======================================================================")
-    print("            PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
-    print("======================================================================")
+    print_phase("PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     try:
         # Regenerate airfoil with panel-specific points if needed
         X_panel, Y_panel, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
         
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
         
-        # Add final Cl/Cd from optimizer to the results for plotting
-        final_opt_perf = next((h for h in reversed(history) if isinstance(h[4], float)), None)
-        final_cl = final_opt_perf[4] if final_opt_perf else None
-        final_cd = final_opt_perf[5] if final_opt_perf else None
+        # Final XFOIL run on the optimized airfoil. The last row of the history is not used:
+        # it can be a finite-difference or line-search point instead of result.x.
+        # Same geometry (and paneling) as in the optimizer
+        X_xfoil, Y_xfoil, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
+        final_analysis = XFoilAnalysis(airfoil_name="final", alpha=target_alpha,
+                                       reynolds=target_reynolds, mach=target_mach)
+        final_cl, final_cd, final_alpha = final_analysis.run_analysis(X_xfoil, Y_xfoil)
 
         print("\n--- Global Results ---")
         if final_cl is not None and final_cd is not None:
             print(f"XFOIL Viscous Cl: {final_cl:.4f}")
             print(f"XFOIL Viscous Cd: {final_cd:.5f}")
+            if abs(final_alpha - target_alpha) > 1e-6:
+                print(f"[!] XFOIL converged only up to alpha = {final_alpha} deg (target {target_alpha} deg)")
+            if objective == MIN_CD and abs(final_cl - target_cl) > CL_TOLERANCE:
+                print(f"[!] Final Cl is outside the tolerance ({target_cl} +/- {CL_TOLERANCE})")
+            if objective == MAX_CL and final_cd > max_cd:
+                print(f"[!] Final Cd is above the limit ({max_cd})")
+        else:
+            print("[!] XFOIL did not converge on the final airfoil: viscous Cl and Cd not available")
         print(f"Potential Cl:     {panel_results['cl_potential']:.4f}")
         print("-------------------------\n")
 
@@ -169,20 +212,24 @@ def main():
         with open(csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["# Global Coefficients"])
-            writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl"])
-            writer.writerow([final_cl, final_cd, panel_results['cl_potential']])
+            writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", "m", "p", "t", "Seed"])
+            writer.writerow([final_cl, final_cd, panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
             writer.writerow([])
-            writer.writerow(["# Surface Distributions"])
+            writer.writerow(["# Surface Distributions (Cp_Lower interpolated at the upper-surface x/c)"])
             writer.writerow(["x/c", "Cp_Upper", "Cp_Lower", "Delta_Cp"])
             
-            n_half = panel_results['num_panels'] // 2
-            x_upper = panel_results['XC'][n_half:]
-            cp_upper = panel_results['Cp'][n_half:]
-            cp_lower = panel_results['Cp'][:n_half][::-1]
-            delta_cp = cp_lower - cp_upper
-            
+            x_upper, cp_upper, cp_lower, delta_cp = surface_distributions(panel_results)
+
             for i in range(len(x_upper)):
                 writer.writerow([f"{x_upper[i]:.6f}", f"{cp_upper[i]:.6f}", f"{cp_lower[i]:.6f}", f"{delta_cp[i]:.6f}"])
+
+        # --- CAD / ParaView / OpenFOAM export ---
+        print("\n[+] Exporting files for CAD, ParaView and OpenFOAM...")
+        export_paths = export_all(X_opt, Y_opt, panel_results, chord, span, results_dir,
+                                  name=f"airfoil_NACA_{naca_opt_str}")
+        print(f"    - CAD (mm):        {os.path.basename(export_paths['dxf'])}, {os.path.basename(export_paths['csv'])}")
+        print(f"    - ParaView (m):    {os.path.basename(export_paths['vtk'])}")
+        print(f"    - OpenFOAM/3D (m): {os.path.basename(export_paths['stl'])} (span {span} m)")
 
         print(f"\n[+] Analysis complete. All plots and CSV saved in '{results_dir}/'")
 
