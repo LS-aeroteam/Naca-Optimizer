@@ -120,10 +120,8 @@ def main():
         plot_optimization_history
     )
     if solver == XFOIL:
-        from naca_core.xfoil_optimizer import NacaOptimizer, MIN_CD, MAX_CL, CL_TOLERANCE
+        from naca_core.xfoil_optimizer import MIN_CD, MAX_CL, CL_TOLERANCE
         from naca_core.xfoil import XFoilAnalysis
-    else:
-        from naca_core.inhouse_optimizer import NacaOptimizer
 
     # Get aerodynamic targets from the user
     inputs = get_user_input(solver)
@@ -150,7 +148,10 @@ def main():
             print(f"[i] Objective: minimum Cd with Cl = {target_cl} +/- {CL_TOLERANCE} (score = Cd in counts + penalty)")
         else:
             print(f"[i] Objective: maximum Cl with Cd <= {max_cd} (score = -Cl + penalty)")
-        optimizer = NacaOptimizer(
+        # Each optimizer is imported with its own name where it is used: type checkers (Pyrefly, Pyright)
+        # then match each call to its own class instead of mixing the two signatures
+        from naca_core.xfoil_optimizer import NacaOptimizer as XfoilOptimizer
+        optimizer = XfoilOptimizer(
             reynolds=target_reynolds,
             alpha=target_alpha,
             objective=objective,
@@ -163,7 +164,8 @@ def main():
             seed=seed
         )
     else:
-        optimizer = NacaOptimizer(
+        from naca_core.inhouse_optimizer import NacaOptimizer as InhouseOptimizer
+        optimizer = InhouseOptimizer(
             reynolds=target_reynolds,
             alpha=target_alpha,
             target_cl=target_cl,
