@@ -254,9 +254,10 @@ def main():
             plot_data[profile_name].append(res_dict)
 
     # --- Save CSV ---
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    results_subfolder_name = f"Validation_Re{int(round(reynolds))}_Mach{mach:.3f}"
-    results_subfolder = os.path.join(base_dir, "Results", results_subfolder_name)
+    # Same Results/ folder as the optimizer (repository root), in its own validation/ subfolder
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    results_subfolder_name = f"Re{int(round(reynolds))}_Mach{mach:.3f}"
+    results_subfolder = os.path.join(repo_root, "Results", "validation", results_subfolder_name)
     os.makedirs(results_subfolder, exist_ok=True)
     csv_file = os.path.join(results_subfolder, "validation_results.csv")
     print(f"\n[+] Saving test results to '{csv_file}'...")

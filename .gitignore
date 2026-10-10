@@ -7,9 +7,9 @@ __pycache__/
 venv/
 
 # XFOIL executables (GPL binary: downloaded automatically on Windows,
-# installed by the user on Linux/macOS)
+# installed by the user on Linux/macOS) go in naca_core/bin/
+/naca_core/bin/
 xfoil.exe
-/xfoil_viscous_optimizer/xfoil
 
 # Run outputs: every run creates its own folder under Results/. They are not versioned.
 Results/

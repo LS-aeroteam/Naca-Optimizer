@@ -9,7 +9,7 @@ cd validation_inhouse_vs_xfoil
 python run_validation.py
 ```
 
-Press **Enter** to accept the default value of each prompt (fluid, angle-of-attack sweep, speed, chord, number of panels). XFOIL must be set up as described in `xfoil_viscous_optimizer/README.md`.
+Press **Enter** to accept the default value of each prompt (fluid, angle-of-attack sweep, speed, chord, number of panels). XFOIL must be set up as described in the main README (the executable goes in `naca_core/bin/`).
 
 ## What it computes
 
@@ -51,7 +51,7 @@ The boundary layer explains most of the difference, and its share grows with cam
 
 ## Output
 
-`Results/Validation_Re<Reynolds>_Mach<Mach>/`:
+`Results/validation/Re<Reynolds>_Mach<Mach>/` (in the repository root):
 
 - `validation_results.csv`: all Cl values, the viscous Cd, the error parts and the breakdown method used;
 - `validation_plot_cl.svg`: Cl vs alpha for each airfoil (in-house, XFOIL inviscid, XFOIL viscous);

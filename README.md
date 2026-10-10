@@ -19,19 +19,32 @@ What every symbol, message and number means, and why each value was chosen, is e
 
 ```
 Naca-optimizer/
-├── naca_core/                      # Shared code: geometry, panel method, XFOIL wrapper, plots, checks
-├── inhouse_potential_optimizer/    # Optimizer based on our panel method
-│   ├── run.py                      # Start here
-│   ├── inhouse_optimizer.py
-│   └── Results/                    # Output folders, one per run (created by the script, not versioned)
-├── xfoil_viscous_optimizer/        # Optimizer based on XFOIL
-│   ├── run.py
-│   ├── xfoil_optimizer.py
-│   └── Results/
+├── run.py                          # Start here: python run.py (you choose the solver)
+├── naca_core/                      # All the code
+│   ├── __init__.py
+│   ├── panel_method.py             # In-house solver (source + vortex panel method)
+│   ├── xfoil.py                    # XFOIL solver: writes the script, runs XFOIL, reads the polar
+│   ├── inhouse_optimizer.py        # Connects the panel method to the search
+│   ├── xfoil_optimizer.py          # Connects XFOIL to the search, with the two objectives
+│   ├── optimization.py             # Shared search: Genetic Algorithm + SLSQP, table, box, seed
+│   ├── airfoil.py                  # NACA 4-digit geometry
+│   ├── export.py                   # DXF, CSV, VTK, STL
+│   ├── plotting.py                 # Plots
+│   ├── pre_run_checks.py           # Library and XFOIL checks
+│   └── bin/                        # XFOIL executable (not versioned)
 ├── validation_inhouse_vs_xfoil/    # In-house vs XFOIL comparison
 │   ├── run_validation.py
-│   └── Results/
+│   └── README.md
 ├── tests/                          # Numerical baseline check
+│   ├── baseline_check.py
+│   └── baseline_reference.json
+├── Results/                        # Created by the scripts, not versioned
+│   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
+│   │   └── export/                 # CAD, ParaView and OpenFOAM files
+│   └── validation/
+│       └── Re<Re>_Mach<M>/         # one folder per validation run
+├── requirements.txt                # Python libraries: pip install -r requirements.txt
+├── TODO.md                         # Open items and planned work
 └── _Original_projects/             # Original MATLAB script and first Python version (reference only)
 ```
 
@@ -94,10 +107,12 @@ python -m pip install -r requirements.txt
 
 **XFOIL setup**
 
-- **Windows:** the script looks for `xfoil.exe` inside `xfoil_viscous_optimizer/`. If it is not there, it downloads XFOIL 6.99 from the official MIT page and puts it there.
-- **Linux / macOS:** install XFOIL yourself and make sure the `xfoil` command is on your PATH, or copy the executable into `xfoil_viscous_optimizer/`.
+- **Windows:** the program looks for `xfoil.exe` in `naca_core/bin/`. If it is not there, it downloads XFOIL 6.99 from the official MIT page and puts it there.
+- **Linux / macOS:** install XFOIL yourself and make sure the `xfoil` command is on your PATH, or copy the executable into `naca_core/bin/`.
 
-Every script checks the Python libraries at start-up and, if some are missing, asks whether to install them with pip. The XFOIL solver and the validation script also check for XFOIL.
+`naca_core/bin/` is ignored by git, so the executable never ends up in a commit.
+
+Both scripts check the Python libraries at start-up and, if some are missing, ask whether to install them with pip. XFOIL is checked only when you choose the XFOIL solver, and by the validation script.
 
 ---
 
@@ -105,12 +120,23 @@ Every script checks the Python libraries at start-up and, if some are missing, a
 
 Every prompt has a default value: just press **Enter** to accept it.
 
-### In-house solver
+### Optimization
+
+From the repository folder:
 
 ```bash
-cd inhouse_potential_optimizer
 python run.py
 ```
+
+The first question is the solver:
+
+```
+Select the solver:
+1. In-house panel method (potential flow, fast, no drag)
+2. XFOIL (viscous, slower, gives drag)
+```
+
+Then the setup, the same for both solvers:
 
 | Prompt | Default | Notes |
 |--------|---------|-------|
@@ -118,7 +144,9 @@ python run.py
 | Design speed | 50 m/s | |
 | Chord | 1.0 m | Reynolds and Mach are computed from speed, chord and fluid |
 | Angle of attack | 4.0° | |
-| Target Cl | 0.8 | |
+| Objective | 1 | XFOIL only: `1` = minimum Cd at a target Cl, `2` = maximum Cl with a Cd limit |
+| Target Cl | 0.8 | Asked with objective 1, and always with the in-house solver |
+| Maximum Cd | 0.02 | XFOIL, objective 2 only |
 | Bounding box max height | 0.3 m | Maximum total height of the airfoil (thickness + camber) |
 | Number of panels | 160 | 60 = fast, 160 = accurate |
 | Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
@@ -132,16 +160,9 @@ While it runs, you see one table row per evaluated airfoil:
 |    2 | 0.0441 | 0.1438 | 0.1791 |  1.0147 |       - |      |  4.6090e+00 |
 ```
 
-`BB` shows `OUT` when the airfoil is taller than the bounding box (it is not analysed). Cd shows `-` because potential flow has no drag.
+`BB` shows `OUT` when the airfoil is taller than the bounding box (it is not analysed). With the in-house solver Cd shows `-`, because potential flow has no drag.
 
-### XFOIL solver
-
-```bash
-cd xfoil_viscous_optimizer
-python run.py
-```
-
-Same prompts and same table as the in-house solver, plus the **objective**: `1` = minimum Cd at a target Cl (asks the target Cl), `2` = maximum Cl with a Cd limit (asks the maximum Cd, default 0.02). In the Cl column, `Failed` means XFOIL did not converge at the target angle, and `Timeout` means it took more than 30 s. Both are treated as failed evaluations.
+With XFOIL, `Failed` in the Cl column means XFOIL did not converge at the target angle, and `Timeout` means it took more than 30 s. Both are treated as failed evaluations.
 
 ### Validation
 
@@ -190,12 +211,14 @@ Typically the boundary layer explains most of the difference: it makes the real 
 
 ## Output
 
-Each optimization run creates its own folder. The `Results/` folders are created by the scripts and ignored by git, so your runs never end up in a commit.
+Everything goes into one `Results/` folder in the repository root, created by the scripts and ignored by git, so your runs never end up in a commit. Each optimization run gets its own subfolder, named after the case, the solver and the seed:
 
 ```
-Results/Results_Re<Reynolds>_Alpha<angle>_Cl<target>/       (target-Cl runs)
-Results/Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/    (XFOIL, maximum-Cl runs)
+Results/Re<Reynolds>_Alpha<angle>_Cl<target>_<solver>_seed<N>/     (target-Cl runs)
+Results/Re<Reynolds>_Alpha<angle>_CdMax<limit>_xfoil_seed<N>/      (XFOIL, maximum-Cl runs)
 ```
+
+`<solver>` is `inhouse` or `xfoil`. For example `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_seed42/`. The same case solved with both solvers ends up in two folders side by side, and runs with different seeds never overwrite each other.
 
 | File | Content |
 |------|---------|
@@ -211,7 +234,7 @@ Results/Results_Re<Reynolds>_Alpha<angle>_CdMax<limit>/    (XFOIL, maximum-Cl ru
 | `export/airfoil_NACA_xxxx_surface.vtk` | ParaView: airfoil contour in m with Cp and V/V∞ (in-house panel method) |
 | `export/airfoil_NACA_xxxx_wing.stl` | OpenFOAM, CAD, 3D printing: the airfoil extruded along z (closed surface, in m) |
 
-The validation script saves in `Results/Validation_Re<Reynolds>_Mach<Mach>/`:
+The validation script saves in `Results/validation/Re<Reynolds>_Mach<Mach>/`:
 
 | File | Content |
 |------|---------|
