@@ -6,7 +6,7 @@ Run from anywhere:
     python tests/stl_export_check.py --out <folder>
 
 The reference case is the NACA 2421 of the run Re3424658_Alpha4.0_Cl0.8_inhouse_seed657086
-(exact m, p, t of that run, 200 points per side as in run.py, chord 1 m, span 1 m).
+(exact m, p, t of that run, 200 points per side and closed trailing edge as in run.py, chord 1 m, span 1 m).
 Its metrics must be inside the thresholds below. The other cases are only reported.
 Each STL is read back from the file, so the metrics describe what Fluent receives.
 
@@ -159,7 +159,7 @@ def check(m, chord):
 
 def run_case(case, out_dir):
     name, mp, pp, tp, chord, span = case
-    X, Y, _ = naca4_airfoil(mp, pp, tp, num_points=NUM_POINTS)
+    X, Y, _ = naca4_airfoil(mp, pp, tp, num_points=NUM_POINTS, closed_te=True)  # as exported by run.py
     path = os.path.join(out_dir, f"airfoil_{name}_wing.stl")
     print(f"\n=== {name}  (m={mp:.4f} p={pp:.4f} t={tp:.4f}, chord {chord} m, span {span} m)")
     write_stl_wing(X, Y, chord, span, path, name=f"airfoil_{name}")

@@ -254,8 +254,9 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
 
-    # Save optimized airfoil coordinates
-    X_opt, Y_opt = family.coordinates(opt_params, 200)
+    # Save optimized airfoil coordinates. The delivered geometry (.dat, plot, CAD/mesh export) has a
+    # closed trailing edge; the analyses use the open one (see naca_core.airfoil.naca4_airfoil)
+    X_opt, Y_opt = family.coordinates(opt_params, 200, closed_te=True)
     airfoil_filename = os.path.join(results_dir, f"airfoil_{file_tag}.dat")
     exact_params = " ".join(f"{n}={v:.6f}" for n, v in zip(family.params, opt_params))
     save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename, header=f"{airfoil_name} ({exact_params})")
