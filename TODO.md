@@ -1,26 +1,22 @@
-## 📐 Geometria (Geometry Engine)
+## Geometry (Geometry Engine)
+- [ ]  **NACA 5-digit**: Implement the mathematical formulation that generates the NACA 5-digit series airfoils.
+- [ ]  **Asymmetric airfoils**: Support independent curves for the upper and lower surface.
+- [ ]  **Trailing-edge closure**: Set the geometric standard for the trailing edge (open vs closed), based on the requirements of the later mesh generation.
 
-- [ ]  **NACA a 5 cifre**: Implementare la formulazione matematica per la generazione di profili NACA della serie a 5 cifre.
-- [ ]  **Profili asimmetrici**: Sviluppare il supporto per la definizione di curve indipendenti per dorso e ventre.
-- [ ]  **Chiusura bordo d'uscita**: Fissare lo standard geometrico di chiusura del bordo d'uscita (aperto vs chiuso) in funzione dei requisiti per la successiva generazione della mesh.
+## Aerodynamics and Physical Models
+- [ ]  **Boundary layer (Prandtl)**: Add the boundary-layer calculation to the in-house solver to estimate Cd. Goal: use the same cost function as XFOIL.
+- [ ]  **Transition analysis (Spike)**: Study how XFOIL implements the transition criterion (e^N method or similar) and define the architecture to replicate/adapt it in the code.
+- [ ]  **Separation handling (Spike)**: Design the algorithm that detects flow separation and accounts for its effects.
+- [ ]  **Streamlines**: Output the streamlines for the winning airfoil.
+- [ ]  **Prandtl-Glauert correction**: Add the correction for subsonic compressibility effects (baseline: the Mach number changes Cl by about -0.02 at 10°).
 
-## 🌪️ Aerodinamica e Modelli Fisici
+## I/O Architecture and Optimization
+- [ ]  **Objective 2 tuning**: Recalibrate the default Cd limit (the current threshold of 0.02 at 4° has no effect on the optimization).
+- [ ]  **Input file**: Define the inputs in a file instead of the terminal.
+- [ ]  **Solver selection from the CLI**: Evaluate adding a command-line option next to the interactive question (e.g. `--solver xfoil`), useful to run several cases automatically.
+- [ ]  **Terminal non-regression test**: Evaluate making the before/after comparison of the terminal output (fixed seed) a permanent test in `tests/`, next to the existing numerical baseline.
+- [ ]  **Cl penalty in objective 1**: With the quadratic penalty, going slightly outside the Cl tolerance costs less than the Cd saved (0.0003 outside the tolerance = 9 drag counts): with seed 657086 the final Cl is 0.7947 instead of 0.8 ± 0.005. Evaluate a linear penalty or a larger weight. It changes the results: to be decided together.
+- [ ]  **XFOIL logging**: `naca_core/xfoil.py` calls `logging.basicConfig(level=INFO)` when the module is loaded, so in XFOIL runs the `[INFO]` messages of ezdxf are shown during the export. Use a module logger without configuring the global one.
 
-- [ ]  **Strato limite (Prandtl)**: Integrare il calcolo dello strato limite nel solutore in-house per stimare il Cd. Obiettivo: utilizzare la medesima funzione di costo di XFOIL.
-- [ ]  **Correzione di Prandtl-Glauert**: Aggiungere la correzione per effetti di compressibilità subsonica (baseline: il numero di Mach incide per circa -0.02 sul Cl a 10°).
-- [ ]  **Analisi Transizione (Spike)**: Analizzare l'implementazione del criterio di transizione in XFOIL (metodo e^N o similare) e definire l'architettura per replicarlo/adattarlo nel codice.
-- [ ]  **Gestione Separazione (Spike)**: Strutturare la logica algoritmica per il rilevamento e l'integrazione degli effetti della separazione del flusso.
-- [ ]  **Linee di corrente**: implementare l'output con linee di corrente per il profilo vincente
-
-## ⚙️ Architettura I/O e Ottimizzazione
-
-- [ ]  **Inizializzazione Seed**: Definire la policy per il seed del generatore (valutare seed fisso per riproducibilità dei test vs casuale per esplorazione completa dello spazio).
-- [ ]  **Tuning Obiettivo 2**: Ricalibrare il limite di Cd di default (la soglia attuale di 0.02 a 4° risulta matematicamente ininfluente sull'ottimizzazione).
-- [ ]  **Selezione solutore da CLI**: Valutare se affiancare alla domanda interattiva un'opzione da riga di comando (es. `--solver xfoil`), utile per lanciare più casi in automatico.
-- [ ]  **Test di non regressione sul terminale**: Valutare se rendere permanente il confronto dell'output prima/dopo (a seme fisso) come test in `tests/`, oltre alla baseline numerica esistente.
-- [ ]  **Penalità di Cl nell'obiettivo 1**: Con la penalità quadratica uscire di poco dalla tolleranza di Cl costa meno del Cd risparmiato (0.0003 fuori tolleranza = 9 drag count): con seme 657086 il Cl finale è 0.7947 invece di 0.8 ± 0.005. Valutare una penalità lineare o un peso maggiore. Cambia i risultati: da decidere insieme.
-- [ ]  **Logging di XFOIL**: `naca_core/xfoil.py` chiama `logging.basicConfig(level=INFO)` al caricamento del modulo, quindi nei run con XFOIL i messaggi `[INFO]` di ezdxf compaiono a video durante l'export. Usare un logger del modulo senza configurare quello globale.
-
-## 📄 Gestione Repository
-
-- [ ]  **Licenza**: Selezionare e applicare una licenza open source (es. MIT o GPL) tramite l'inserimento del file `LICENSE` per definire legalmente l'uso del codice da parte di terzi.
+## Repository Management
+- [ ]  **License**: Choose and apply an open-source license (e.g. MIT or GPL) by adding a `LICENSE` file, to define legally how third parties may use the code.
