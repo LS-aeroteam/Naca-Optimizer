@@ -32,9 +32,13 @@ SOLVER = "inhouse"
 #            t (thickness). Starts from NACA 2412.
 #   "naca5"  NACA 5-digit, non-reflex mean line, e.g. NACA 23012. Parameters: cl_d (design
 #            lift coefficient), p (position of max camber, 0.05 to 0.25), t. Starts from NACA 23012.
+#   "cst"    Free shape (CST / Kulfan): upper and lower surface are independent curves,
+#            each with CST_ORDER + 1 coefficients. No NACA name. Starts from the CST copy
+#            of NACA 2412. More parameters = longer search (XFOIL: several minutes).
 #   The family can be chosen only here: the questions in the terminal always use "naca4".
 
 AIRFOIL_FAMILY = "naca4"
+CST_ORDER = 3           # [-]    only for "cst": 2 = 6 parameters, 3 = 8, 4 = 10 ...
 
 
 # =============================================================================

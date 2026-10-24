@@ -138,6 +138,54 @@ def naca5_airfoil(cl_design, p_param, t_param, chord=1.0, num_points=100, closed
     return _contour(x, yt, yc, dyc_dx)
 
 
+CST_TE_GAP = 0.0025  # [fraction of chord] trailing-edge gap of the analysed CST airfoils, as NACA 2412
+
+
+def _bernstein(x, order):
+    """Bernstein polynomials of the given order at x: array (len(x), order + 1)."""
+    from math import comb
+    return np.column_stack([comb(order, i) * x ** i * (1 - x) ** (order - i) for i in range(order + 1)])
+
+
+def _cst_class(x):
+    """CST class function of a round-nose airfoil with a sharp trailing edge: sqrt(x) * (1 - x)."""
+    return np.sqrt(x) * (1 - x)
+
+
+def cst_airfoil(a_upper, a_lower, chord=1.0, num_points=100, te_gap=0.0):
+    """
+    Generates the coordinates for a CST (Kulfan) airfoil: upper and lower surface are independent,
+
+        y(x) = sqrt(x) * (1 - x) * sum_i A_i * B_i(x)  +/-  x * te_gap / 2
+
+    with B_i the Bernstein polynomials of order len(A) - 1. The lower-surface coefficients of a
+    usual airfoil are negative. Same point spacing and output as naca4_airfoil.
+
+    Args:
+        a_upper (sequence): Upper-surface coefficients.
+        a_lower (sequence): Lower-surface coefficients (same number as a_upper).
+        chord (float, optional): The airfoil chord length. Defaults to 1.0.
+        num_points (int, optional): The number of points for the upper or lower surface. Defaults to 100.
+        te_gap (float, optional): Trailing-edge gap as a fraction of the chord. 0 = closed trailing edge.
+    """
+    x = _cosine_x(1.0, num_points)
+    basis = _bernstein(x, len(a_upper) - 1) * _cst_class(x)[:, None]
+    yu = basis @ np.asarray(a_upper, float) + x * te_gap / 2
+    yl = basis @ np.asarray(a_lower, float) - x * te_gap / 2
+    xu = xl = x
+    X = chord * np.concatenate((np.flip(xu), xl[1:]))
+    Y = chord * np.concatenate((np.flip(yu), yl[1:]))
+    return X, Y, (chord * xu, chord * yu, chord * xl, chord * yl)
+
+
+def cst_fit(xs, ys, order):
+    """Least-squares CST coefficients of one surface given by points (xs, ys), chord 1."""
+    xs, ys = np.asarray(xs, float), np.asarray(ys, float)
+    inner = (xs > 0) & (xs < 1)  # the class function is zero at both ends
+    basis = _bernstein(xs[inner], order) * _cst_class(xs[inner])[:, None]
+    return np.linalg.lstsq(basis, ys[inner], rcond=None)[0]
+
+
 class AirfoilFamily:
     """
     A family of airfoils described by a few parameters: everything the optimizer and run.py
@@ -151,13 +199,16 @@ class AirfoilFamily:
         initial_guess (list): Starting airfoil, always in the initial population of the search.
     """
 
-    def __init__(self, key, params, descriptions, bounds, initial_guess, coordinates, name, failure_score):
+    def __init__(self, key, params, descriptions, bounds, initial_guess, coordinates, name, failure_score,
+                 shape_error=None):
         """
         Args:
-            coordinates (callable): (params, num_points) -> (X, Y), closed contour TE -> upper -> LE -> lower -> TE.
+            coordinates (callable): (params, num_points, closed_te) -> (X, Y), contour TE -> upper -> LE -> lower -> TE.
             name (callable): params -> airfoil name (e.g. "NACA 2412").
             failure_score (callable): (params, penalty) -> score of a failed analysis: the penalty plus a small
                 term, lower for usual shapes, so that the search moves back towards shapes that work.
+            shape_error (callable, optional): params -> None for a valid shape, or a short label (shown in the
+                Cl column) when the parameters give no real airfoil; the shape is then not analysed.
         """
         self.key = key
         self.params = tuple(params)
@@ -167,6 +218,7 @@ class AirfoilFamily:
         self._coordinates = coordinates
         self._name = name
         self._failure_score = failure_score
+        self._shape_error = shape_error
 
     def coordinates(self, params, num_points, closed_te=False):
         """Airfoil contour (X, Y) with num_points points per surface. closed_te: sharp trailing edge (export)."""
@@ -177,6 +229,9 @@ class AirfoilFamily:
 
     def failure_score(self, params, penalty):
         return self._failure_score(params, penalty)
+
+    def shape_error(self, params):
+        return self._shape_error(params) if self._shape_error else None
 
     def describe(self, params, digits=4):
         """Exact parameters as text, e.g. "m = 0.0200, p = 0.4000, t = 0.1200"."""
@@ -223,8 +278,68 @@ NACA5 = AirfoilFamily(
 )
 
 
-def get_family(key):
-    """Airfoil family from its name in the input file ("naca4", "naca5")."""
+def _max_distance(points, polyline):
+    """Largest distance of the points (n, 2) from the polyline (m, 2)."""
+    A, AB = polyline[:-1], np.diff(polyline, axis=0)
+    t = np.clip(np.einsum("nmj,mj->nm", points[:, None, :] - A[None], AB) / np.einsum("mj,mj->m", AB, AB), 0, 1)
+    return float(np.linalg.norm(points[:, None, :] - (A[None] + t[..., None] * AB[None]), axis=2).min(axis=1).max())
+
+
+def cst_family(order=3):
+    """
+    Free airfoil family: CST (Kulfan) with order + 1 coefficients on each surface.
+
+    Search limits: the CST fit of NACA 4-digit airfoils spread over the whole NACA 4-digit search
+    range (m 0/0.045/0.09, p 0.1/0.4/0.7, t 0.05/0.15/0.25), widened by 25 % of the spread on each
+    side. Fits further than 0.005 of the chord from their NACA airfoil are left out: those NACA
+    shapes (high camber close to the leading edge) reach ahead of x = 0, which a CST airfoil cannot,
+    and their coefficients would only widen the limits. Starting airfoil: the CST fit of NACA 2412,
+    as for NACA 4-digit. The analyses use a trailing-edge gap of CST_TE_GAP (as NACA 2412), the
+    exported airfoil a closed trailing edge.
+    """
+    fits = []
+    for m in (0.0, 0.045, 0.09):
+        for p in (0.1, 0.4, 0.7):
+            for t in (0.05, 0.15, 0.25):
+                X, Y, (xu, yu, xl, yl) = naca4_airfoil(m, p, t, num_points=200, closed_te=True)
+                coeffs = np.concatenate((cst_fit(xu, yu, order), cst_fit(xl, yl, order)))
+                CX, CY, _ = cst_airfoil(coeffs[:order + 1], coeffs[order + 1:], num_points=400)
+                if _max_distance(np.column_stack([X, Y])[::4], np.column_stack([CX, CY])) <= 0.005:
+                    fits.append(coeffs)
+    _, _, (xu, yu, xl, yl) = naca4_airfoil(0.02, 0.4, 0.12, num_points=200, closed_te=True)
+    start = np.concatenate((cst_fit(xu, yu, order), cst_fit(xl, yl, order)))
+    fits = np.array(fits)
+    lo, hi = fits.min(axis=0), fits.max(axis=0)
+    bounds = [(float(a - 0.25 * (b - a)), float(b + 0.25 * (b - a))) for a, b in zip(lo, hi)]
+    n = order + 1
+    spread = np.array([b - a for a, b in bounds])
+    x_check = _cosine_x(1.0, 201)[1:-1]
+    thickness_basis = _bernstein(x_check, order) * _cst_class(x_check)[:, None]
+
+    def shape_error(params):
+        # The upper surface must stay above the lower one (zero thickness only at the two ends)
+        thickness = thickness_basis @ (np.asarray(params[:n]) - np.asarray(params[n:]))
+        return "Crossed" if thickness.min() <= 0 else None
+
+    return AirfoilFamily(
+        key=f"cst{order}",
+        params=tuple(f"Au{i}" for i in range(n)) + tuple(f"Al{i}" for i in range(n)),
+        descriptions=tuple(f"Upper coefficient {i}" for i in range(n)) + tuple(f"Lower coefficient {i}" for i in range(n)),
+        bounds=bounds,
+        initial_guess=[float(v) for v in start],
+        coordinates=lambda params, num_points, closed_te: cst_airfoil(
+            params[:n], params[n:], num_points=num_points, te_gap=0.0 if closed_te else CST_TE_GAP)[:2],
+        name=lambda params: f"CST-{order}",
+        # Among failed airfoils it prefers shapes close to the starting airfoil (NACA 2412)
+        failure_score=lambda params, penalty: penalty + 1e3 * float(np.sum(((np.asarray(params) - start) / spread) ** 2)),
+        shape_error=shape_error,
+    )
+
+
+def get_family(key, cst_order=3):
+    """Airfoil family from its name in the input file ("naca4", "naca5", "cst")."""
+    if key == "cst":
+        return cst_family(cst_order)
     return {"naca4": NACA4, "naca5": NACA5}[key]
 
 

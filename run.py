@@ -189,8 +189,8 @@ def main():
     span = inputs['span']
     # Airfoil family: parameters, search limits, geometry and name. Chosen only in the input file;
     # the interactive questions always use NACA 4-digit
-    family_key = inputs.get('airfoil_family', DEFAULTS['airfoil_family'])
-    family = get_family(family_key)
+    family = get_family(inputs.get('airfoil_family', DEFAULTS['airfoil_family']),
+                        inputs.get('cst_order', DEFAULTS['cst_order']))
 
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
@@ -253,7 +253,7 @@ def main():
     # One Results/ folder for both solvers: Re<Re>_Alpha<alpha>_<objective>_<solver>[_<family>]_seed<N>
     objective_tag = f"Cl{target_cl}" if target_cl is not None else f"CdMax{max_cd}"
     # The family is in the name only when it is not NACA 4-digit, so earlier folder names do not change
-    family_tag = "" if family_key == "naca4" else f"_{family_key}"
+    family_tag = "" if family.key == "naca4" else f"_{family.key}"  # e.g. _naca5, _cst3
     results_dir_name = (f"Re{int(round(target_reynolds))}_Alpha{target_alpha}_{objective_tag}_{solver}"
                         f"{family_tag}_seed{seed}")
     results_dir = os.path.join(REPO_ROOT, "Results", results_dir_name)

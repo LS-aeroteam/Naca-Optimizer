@@ -18,7 +18,7 @@ OBJECTIVE_CHOICES = {"min_cd": "1", "max_cl": "2"}
 
 # Airfoil families (naca_core.airfoil.get_family). Chosen only in the input file:
 # the interactive questions always use "naca4".
-AIRFOIL_FAMILIES = ("naca4", "naca5")
+AIRFOIL_FAMILIES = ("naca4", "naca5", "cst")
 
 FLUIDS = {
     "air": {"name": "Air (Standard SL)", "viscosity": 1.46e-5, "speed_of_sound": 340.3},
@@ -30,6 +30,7 @@ FLUIDS = {
 DEFAULTS = {
     "solver": INHOUSE,
     "airfoil_family": "naca4",
+    "cst_order": 3,
     "fluid": "air",
     "speed": 50,
     "chord": 1.0,
@@ -48,7 +49,7 @@ _NUMBER = "a number"
 _INTEGER = "a whole number"
 _TEXT = "text in quotes"
 _KEY_TYPES = {
-    "solver": _TEXT, "airfoil_family": _TEXT, "fluid": _TEXT, "speed": _NUMBER, "chord": _NUMBER,
+    "solver": _TEXT, "airfoil_family": _TEXT, "cst_order": _INTEGER, "fluid": _TEXT, "speed": _NUMBER, "chord": _NUMBER,
     "alpha": _NUMBER, "objective": _TEXT, "target_cl": _NUMBER, "max_cd": _NUMBER, "max_height_box": _NUMBER,
     "num_panels": _INTEGER, "seed": _INTEGER, "span": _NUMBER,
 }
@@ -100,7 +101,7 @@ def load_input_file(path, solver=None):
         solver (str, optional): Solver chosen on the command line; it replaces the one in the file.
 
     Returns:
-        dict: solver and airfoil_family, plus the same keys as run.get_user_input (reynolds, mach,
+        dict: solver, airfoil_family and cst_order, plus the same keys as run.get_user_input (reynolds, mach,
               alpha, objective_choice, target_cl, max_cd, max_height_box, chord, num_panels, seed, span).
               seed is None when the file does not set it (run.py then draws a random one).
 
@@ -137,7 +138,7 @@ def load_input_file(path, solver=None):
     # the in-house solver (no Cd) always reaches the target Cl
     objective_choice = OBJECTIVE_CHOICES[values["objective"]] if values["solver"] == XFOIL else "1"
     return {
-        'solver': values["solver"], 'airfoil_family': values["airfoil_family"],
+        'solver': values["solver"], 'airfoil_family': values["airfoil_family"], 'cst_order': values["cst_order"],
         'reynolds': reynolds, 'mach': mach, 'alpha': float(values["alpha"]),
         'objective_choice': objective_choice,
         'target_cl': float(values["target_cl"]) if objective_choice == "1" else None,
