@@ -64,6 +64,70 @@ def naca4_airfoil(m_param, p_param, t_param, chord=1.0, num_points=100):
     
     return X, Y, (xu, yu, xl, yl)
 
+class AirfoilFamily:
+    """
+    A family of airfoils described by a few parameters: everything the optimizer and run.py
+    need to know about the geometry, so they do not depend on one family.
+
+    Attributes:
+        key (str): Name of the family (e.g. "naca4").
+        params (tuple): Parameter names, in the order of the parameter vector (e.g. ("m", "p", "t")).
+        descriptions (tuple): Short description of each parameter (plot legends).
+        bounds (list): Search limits (min, max) of each parameter.
+        initial_guess (list): Starting airfoil, always in the initial population of the search.
+    """
+
+    def __init__(self, key, params, descriptions, bounds, initial_guess, coordinates, name, failure_score):
+        """
+        Args:
+            coordinates (callable): (params, num_points) -> (X, Y), closed contour TE -> upper -> LE -> lower -> TE.
+            name (callable): params -> airfoil name (e.g. "NACA 2412").
+            failure_score (callable): (params, penalty) -> score of a failed analysis: the penalty plus a small
+                term, lower for usual shapes, so that the search moves back towards shapes that work.
+        """
+        self.key = key
+        self.params = tuple(params)
+        self.descriptions = tuple(descriptions)
+        self.bounds = list(bounds)
+        self.initial_guess = list(initial_guess)
+        self._coordinates = coordinates
+        self._name = name
+        self._failure_score = failure_score
+
+    def coordinates(self, params, num_points):
+        """Airfoil contour (X, Y) with num_points points per surface."""
+        return self._coordinates(params, num_points)
+
+    def name(self, params):
+        return self._name(params)
+
+    def failure_score(self, params, penalty):
+        return self._failure_score(params, penalty)
+
+    def describe(self, params, digits=4):
+        """Exact parameters as text, e.g. "m = 0.0200, p = 0.4000, t = 0.1200"."""
+        return ", ".join(f"{n} = {v:.{digits}f}" for n, v in zip(self.params, params))
+
+
+def _naca4_name(params):
+    m, p, t = params
+    return f"NACA {int(round(m*100))}{int(round(p*10))}{int(round(t*100)):02d}"
+
+
+NACA4 = AirfoilFamily(
+    key="naca4",
+    params=("m", "p", "t"),
+    descriptions=("Max Camber", "Camber Position", "Thickness"),
+    # 0 <= m <= 0.09 keeps the first digit of the name a single digit; p and t from the original code
+    bounds=[(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)],
+    initial_guess=[0.02, 0.4, 0.12],  # NACA 2412
+    coordinates=lambda params, num_points: naca4_airfoil(*params, num_points=num_points)[:2],
+    name=_naca4_name,
+    # From the original code: among failed airfoils it prefers t = 0.12 and m = 0.05
+    failure_score=lambda params, penalty: penalty + (0.12 - params[2]) ** 2 * 1e5 + (0.05 - params[0]) ** 2 * 1e5,
+)
+
+
 def save_airfoil_coordinates(X, Y, filename, header=None):
     """
     Saves airfoil coordinates to a file in the format expected by XFOIL.

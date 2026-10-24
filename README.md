@@ -29,7 +29,7 @@ Naca-optimizer/
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
 │   ├── xfoil_optimizer.py          # Connects XFOIL to the search, with the two objectives
 │   ├── optimization.py             # Shared search: Genetic Algorithm + SLSQP, table, box, seed
-│   ├── airfoil.py                  # NACA 4-digit geometry
+│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit)
 │   ├── export.py                   # DXF, CSV, VTK, STL
 │   ├── plotting.py                 # Plots
 │   ├── pre_run_checks.py           # Library and XFOIL checks

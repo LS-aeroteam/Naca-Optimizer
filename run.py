@@ -149,7 +149,7 @@ def main():
     # Run all dependency and environment checks first
     perform_all_checks(require_xfoil=(solver == XFOIL))
 
-    from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+    from naca_core.airfoil import NACA4, save_airfoil_coordinates
     from naca_core.optimization import print_phase
     from naca_core.export import export_all
     from naca_core.panel_method import run_panel_analysis, surface_distributions
@@ -187,6 +187,7 @@ def main():
     num_panels = inputs['num_panels']
     seed = inputs['seed']
     span = inputs['span']
+    family = NACA4  # airfoil family: parameters, search limits, geometry and name
 
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
@@ -210,7 +211,8 @@ def main():
             chord=chord,
             max_height_box=max_height_box,
             num_panels=num_panels,
-            seed=seed
+            seed=seed,
+            family=family
         )
     else:
         from naca_core.inhouse_optimizer import NacaOptimizer as InhouseOptimizer
@@ -221,23 +223,25 @@ def main():
             max_height_box=max_height_box,
             chord=chord,
             num_panels=num_panels,
-            seed=seed
+            seed=seed,
+            family=family
         )
 
     result = optimizer.optimize(max_iter=50)
 
     # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
     history = optimizer.get_optimization_history()
-    if not any(isinstance(row[4], float) for row in history):
+    if not any(isinstance(row[-3], float) for row in history):  # row[-3] = Cl
         print("\n[!] No airfoil could be analysed successfully, so there is no valid result.")
         print("    Check the solver setup and the input values, then run again.")
         return
 
     # --- Process and Save Optimization Results ---
-    opt_m, opt_p, opt_t = result.x
-    naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
-    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
-    print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
+    opt_params = list(result.x)
+    airfoil_name = family.name(opt_params)         # e.g. "NACA 2412"
+    file_tag = airfoil_name.replace(" ", "_")      # e.g. "NACA_2412", used in the file names
+    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: {airfoil_name}")
+    print(f"[i] Exact parameters: {family.describe(opt_params)}")
     if file_inputs:
         print(f"[i] Random seed: {seed} (set SEED = {seed} in the input file to repeat this run)")
     else:
@@ -251,21 +255,21 @@ def main():
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
 
     # Save optimized airfoil coordinates
-    X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
-    airfoil_filename = os.path.join(results_dir, f"airfoil_NACA_{naca_opt_str}.dat")
-    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename,
-                             header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
+    X_opt, Y_opt = family.coordinates(opt_params, 200)
+    airfoil_filename = os.path.join(results_dir, f"airfoil_{file_tag}.dat")
+    exact_params = " ".join(f"{n}={v:.6f}" for n, v in zip(family.params, opt_params))
+    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename, header=f"{airfoil_name} ({exact_params})")
 
     # Save optimization history
     history_filename = os.path.join(results_dir, "optimization_history.csv")
     with open(history_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Eval', 'm', 'p', 't', 'Cl', 'Cd', 'Score'])
+        writer.writerow(['Eval', *family.params, 'Cl', 'Cd', 'Score'])
         writer.writerows(history)
 
     # Plot and save the optimization history
     history_plot_filename = os.path.join(results_dir, "optimization_history.svg")
-    plot_optimization_history(history, save_path=history_plot_filename)
+    plot_optimization_history(history, family, save_path=history_plot_filename)
 
     # --- PHASE 2: AIRFOIL ANALYSIS ---
     print_phase("PHASE 2: AIRFOIL ANALYSIS")
@@ -273,14 +277,14 @@ def main():
     print("\n[+] Generating plots and extracting final aerodynamic data...")
 
     # 1. Plot airfoil geometry
-    airfoil_plot_filename = os.path.join(results_dir, f"geometry_NACA_{naca_opt_str}.svg")
-    plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: NACA {naca_opt_str}", save_path=airfoil_plot_filename)
+    airfoil_plot_filename = os.path.join(results_dir, f"geometry_{file_tag}.svg")
+    plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: {airfoil_name}", save_path=airfoil_plot_filename)
 
     # --- PHASE 3: POTENTIAL & PRESSURE ANALYSIS ---
     print_phase("PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     try:
         # Regenerate airfoil with panel-specific points if needed
-        X_panel, Y_panel, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
+        X_panel, Y_panel = family.coordinates(opt_params, int(num_panels/2)+1)
 
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
 
@@ -288,7 +292,7 @@ def main():
             # Final XFOIL run on the optimized airfoil. The last row of the history is not used:
             # it can be a finite-difference or line-search point instead of result.x.
             # Same geometry (and paneling) as in the optimizer
-            X_xfoil, Y_xfoil, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
+            X_xfoil, Y_xfoil = family.coordinates(opt_params, int(num_panels/2)+1)
             final_analysis = XFoilAnalysis(airfoil_name="final", alpha=target_alpha,
                                            reynolds=target_reynolds, mach=target_mach)
             final_cl, final_cd, final_alpha = final_analysis.run_analysis(X_xfoil, Y_xfoil)
@@ -312,23 +316,23 @@ def main():
             print("Cd:               not available (potential flow)")
         print("-------------------------\n")
 
-        cp_plot_filename = os.path.join(results_dir, f"pressure_distribution_NACA_{naca_opt_str}.svg")
-        plot_pressure_coefficient(panel_results, target_alpha, f"NACA {naca_opt_str}", save_path=cp_plot_filename)
+        cp_plot_filename = os.path.join(results_dir, f"pressure_distribution_{file_tag}.svg")
+        plot_pressure_coefficient(panel_results, target_alpha, airfoil_name, save_path=cp_plot_filename)
 
-        lift_dist_filename = os.path.join(results_dir, f"lift_distribution_NACA_{naca_opt_str}.svg")
-        plot_lift_distribution(panel_results, target_alpha, f"NACA {naca_opt_str}", save_path=lift_dist_filename)
+        lift_dist_filename = os.path.join(results_dir, f"lift_distribution_{file_tag}.svg")
+        plot_lift_distribution(panel_results, target_alpha, airfoil_name, save_path=lift_dist_filename)
 
         # Save CSV with Cp, Cl (and XFOIL Cl, Cd)
-        csv_filename = os.path.join(results_dir, f"aerodynamic_data_NACA_{naca_opt_str}.csv")
+        csv_filename = os.path.join(results_dir, f"aerodynamic_data_{file_tag}.csv")
         with open(csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["# Global Coefficients"])
             if solver == XFOIL:
-                writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", "m", "p", "t", "Seed"])
-                writer.writerow([final_cl, final_cd, panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
+                writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", *family.params, "Seed"])
+                writer.writerow([final_cl, final_cd, panel_results['cl_potential'], *opt_params, seed])
             else:
-                writer.writerow(["Potential_Cl", "m", "p", "t", "Seed"])
-                writer.writerow([panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
+                writer.writerow(["Potential_Cl", *family.params, "Seed"])
+                writer.writerow([panel_results['cl_potential'], *opt_params, seed])
             writer.writerow([])
             writer.writerow(["# Surface Distributions (Cp_Lower interpolated at the upper-surface x/c)"])
             writer.writerow(["x/c", "Cp_Upper", "Cp_Lower", "Delta_Cp"])
@@ -341,7 +345,7 @@ def main():
         # --- CAD / ParaView / OpenFOAM export ---
         print("\n[+] Exporting files for CAD, ParaView and OpenFOAM...")
         export_paths = export_all(X_opt, Y_opt, panel_results, chord, span, results_dir,
-                                  name=f"airfoil_NACA_{naca_opt_str}")
+                                  name=f"airfoil_{file_tag}")
         print(f"    - CAD (mm):        {os.path.basename(export_paths['dxf'])}, {os.path.basename(export_paths['csv'])}")
         print(f"    - ParaView (m):    {os.path.basename(export_paths['vtk'])}")
         print(f"    - OpenFOAM/3D (m): {os.path.basename(export_paths['stl'])} (span {span} m)")
