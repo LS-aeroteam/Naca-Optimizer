@@ -11,7 +11,7 @@
 - [ ]  **Prandtl-Glauert correction**: Add the correction for subsonic compressibility effects (baseline: the Mach number changes Cl by about -0.02 at 10°).
 
 ## I/O Architecture and Optimization
-- [ ]  **Objective 2 tuning**: Recalibrate the default Cd limit (the current threshold of 0.02 at 4° has no effect on the optimization).
+- [x]  **Objective 2 tuning**: Recalibrate the default Cd limit (the current threshold of 0.02 at 4° has no effect on the optimization).
 - [x]  **Input file**: Define the inputs in a file instead of the terminal.
 - [x]  **Solver selection from the CLI**: Evaluate adding a command-line option next to the interactive question (e.g. `--solver xfoil`), useful to run several cases automatically.
 - [x]  **Terminal non-regression test**: Evaluate making the before/after comparison of the terminal output (fixed seed) a permanent test in `tests/`, next to the existing numerical baseline.

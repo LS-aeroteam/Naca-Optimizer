@@ -29,7 +29,10 @@ class NacaOptimizer(BaseNacaOptimizer):
     CL_LINEAR_WEIGHT = 1e6
     # Quadratic term: 0.001 of Cl outside the tolerance costs 100 counts more, growing fast further out.
     CL_PENALTY_WEIGHT = 1e4
-    # MAX_CL: 1 count of Cd above the limit costs as much as 1.0 of Cl.
+    # MAX_CL, same idea. Linear term: 1 count of Cd above the limit costs 1.0 of Cl from the edge
+    # of the limit, against about 0.024 of Cl gained per count near it (default conditions, Cd 0.006).
+    CD_LINEAR_WEIGHT = 1e4
+    # Quadratic term: 1 count of Cd above the limit costs 1.0 of Cl more, growing fast further out.
     CD_PENALTY_WEIGHT = 1e4
 
     def __init__(self, reynolds, alpha, objective=MIN_CD, target_cl=None, max_cd=None, mach=0.0, ncrit=9.0,
@@ -73,6 +76,6 @@ class NacaOptimizer(BaseNacaOptimizer):
             # Inside the Cl tolerance only Cd counts; outside, a linear + quadratic penalty is added
             cl_excess = max(0.0, abs(cl - self.target_cl) - CL_TOLERANCE)
             return cd * 1e4 + cl_excess * self.CL_LINEAR_WEIGHT + (cl_excess * self.CL_PENALTY_WEIGHT) ** 2
-        # MAX_CL: the higher Cl, the lower the score; Cd above the limit is penalised
+        # MAX_CL: the higher Cl, the lower the score; Cd above the limit gets a linear + quadratic penalty
         cd_excess = max(0.0, cd - self.max_cd)
-        return -cl + (cd_excess * self.CD_PENALTY_WEIGHT) ** 2
+        return -cl + cd_excess * self.CD_LINEAR_WEIGHT + (cd_excess * self.CD_PENALTY_WEIGHT) ** 2

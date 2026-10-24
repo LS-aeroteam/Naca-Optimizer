@@ -45,7 +45,7 @@ ALPHA = 4.0             # [deg]  angle of attack
 OBJECTIVE = "min_cd"    # "min_cd"  minimum Cd with Cl = TARGET_CL +/- 0.005
                         # "max_cl"  maximum Cl with Cd <= MAX_CD
 TARGET_CL = 0.8         # [-]    target lift coefficient   (used by "min_cd" and "inhouse")
-MAX_CD = 0.02           # [-]    maximum drag coefficient  (used by "max_cl")
+MAX_CD = 0.006          # [-]    maximum drag coefficient  (used by "max_cl")
 
 
 # =============================================================================

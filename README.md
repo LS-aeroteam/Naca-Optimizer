@@ -161,7 +161,7 @@ Then the setup, the same for both solvers:
 | Angle of attack | 4.0° | |
 | Objective | 1 | XFOIL only: `1` = minimum Cd at a target Cl, `2` = maximum Cl with a Cd limit |
 | Target Cl | 0.8 | Asked with objective 1, and always with the in-house solver |
-| Maximum Cd | 0.02 | XFOIL, objective 2 only |
+| Maximum Cd | 0.006 | XFOIL, objective 2 only |
 | Bounding box max height | 0.3 m | Maximum total height of the airfoil (thickness + camber) |
 | Number of panels | 160 | 60 = fast, 160 = accurate |
 | Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
@@ -413,7 +413,7 @@ Special values in the Cl column:
 |--------------------|-------|------|
 | In-house | (10 · (Cl − Cl_target))² | none |
 | XFOIL, minimum Cd | Cd · 10⁴ + 10⁶ · Cl excess + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
-| XFOIL, maximum Cl | −Cl + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
+| XFOIL, maximum Cl | −Cl + 10⁴ · Cd excess + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
 | Failed or timeout | 10⁹ + a small term that is lower for airfoils closer to t = 0.12 and m = 0.05 | none |
 | Outside the box | 10⁹ + ((height − box) · 1000)² | none |
 
@@ -458,8 +458,9 @@ Special values in the Cl column:
 | ± 0.005 | Cl tolerance, minimum-Cd objective | 0.6% of a Cl of 0.8: well above XFOIL's resolution (0.0001) and small enough to keep the target meaningful. An exact Cl would be impossible to hit numerically |
 | 10⁶ | Linear Cl penalty weight, minimum-Cd objective | 0.0001 of Cl outside the tolerance costs 100 drag counts, from the very edge of the tolerance. With the quadratic term alone the penalty is flat at the edge, so going slightly outside paid off: with seed 657086 the final Cl was 0.7947 (0.0003 outside = 9 counts of penalty) for about 9 counts of Cd saved. With the linear term the same run ends at Cl 0.7989. Over six seeds (657086, 1, 2, 3, 42, 2412) it changes only that run: the other five give the same airfoil as before |
 | 10⁴ | Quadratic Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts more, and the penalty grows fast further out |
-| 10⁴ | Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs as much as 1.0 of Cl |
-| Cd 0.02 | Default limit, maximum-Cl objective | From the old "maximum tolerable Cd" prompt. At 4° it is too loose to matter (the best airfoil had Cd ≈ 0.007): still to be decided |
+| 10⁴ | Linear Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs 1.0 of Cl, from the very edge of the limit. Near the default limit the search gains about 0.024 of Cl per count, so going above it never pays off. With the quadratic term alone the penalty was flat at the edge: with the default limit the final Cd was 0.00601 (seed 42), and with a limit of 0.0065 it was up to 2.4 counts above |
+| 10⁴ | Quadratic Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs 1.0 of Cl more, and the penalty grows fast further out |
+| Cd 0.006 | Default limit, maximum-Cl objective | Chosen so that the limit drives the result at the default conditions. Without an effective limit (the old default 0.02) the search ends at the highest camber of the search range, Cl ≈ 1.59 with Cd ≈ 0.007, so any limit above ≈ 0.007 has no effect. With 0.006 the final Cd sits just below the limit (0.00597 and 0.00596) and Cl ≈ 1.21–1.28 (seeds 42 and 1). The starting airfoil NACA 2412 (Cd 0.00591) is inside the limit, so the search starts from an allowed airfoil. Below the Cd of NACA 2412 (e.g. 0.0055) runs with different seeds ended far apart (Cl 0.82 and 0.70, measured before the linear Cd penalty was added) |
 | Ncrit = 9 | XFOIL | XFOIL's default, the usual value for an average wind tunnel |
 | ITER 500 | XFOIL | Maximum viscous iterations per angle, from the original code |
 | 1° steps up to the target angle | XFOIL | XFOIL converges more easily when each angle starts from the previous solution. From the original code |

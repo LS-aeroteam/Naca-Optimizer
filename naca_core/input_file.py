@@ -31,7 +31,7 @@ DEFAULTS = {
     "alpha": 4.0,
     "objective": "min_cd",
     "target_cl": 0.8,
-    "max_cd": 0.02,
+    "max_cd": 0.006,
     "max_height_box": 0.3,
     "num_panels": 160,
     "seed": None,
