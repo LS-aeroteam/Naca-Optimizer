@@ -19,15 +19,17 @@ What every symbol, message and number means, and why each value was chosen, is e
 
 ```
 Naca-optimizer/
-├── run.py                          # Start here: python run.py (you choose the solver)
+├── run.py                          # Start here: python run.py (you choose the solver, or --solver)
+├── inputs.py                       # Input file: python run.py --input inputs.py (no questions)
 ├── naca_core/                      # All the code
 │   ├── __init__.py
+│   ├── input_file.py               # Defaults, fluids and the reader of the input file
 │   ├── panel_method.py             # In-house solver (source + vortex panel method)
 │   ├── xfoil.py                    # XFOIL solver: writes the script, runs XFOIL, reads the polar
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
 │   ├── xfoil_optimizer.py          # Connects XFOIL to the search, with the two objectives
 │   ├── optimization.py             # Shared search: Genetic Algorithm + SLSQP, table, box, seed
-│   ├── airfoil.py                  # NACA 4-digit geometry
+│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit)
 │   ├── export.py                   # DXF, CSV, VTK, STL
 │   ├── plotting.py                 # Plots
 │   ├── pre_run_checks.py           # Library and XFOIL checks
@@ -35,9 +37,13 @@ Naca-optimizer/
 ├── validation_inhouse_vs_xfoil/    # In-house vs XFOIL comparison
 │   ├── run_validation.py
 │   └── README.md
-├── tests/                          # Numerical baseline check
-│   ├── baseline_check.py
-│   └── baseline_reference.json
+├── tests/                          # Checks to run after a change (see "Checking your changes")
+│   ├── baseline_check.py           # Numerical baseline: geometry + panel method
+│   ├── baseline_reference.json
+│   ├── terminal_regression_check.py # Whole terminal output of a fixed in-house run
+│   ├── terminal_regression_reference.txt
+│   ├── regression_inputs.py        # Input file of that fixed run
+│   └── stl_export_check.py         # STL export quality
 ├── Results/                        # Created by the scripts, not versioned
 │   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
 │   │   └── export/                 # CAD, ParaView and OpenFOAM files
@@ -62,6 +68,8 @@ Each airfoil is built from three numbers:
 | `t` | maximum thickness (fraction of chord) | 0.12 |
 
 Points are placed with cosine spacing, so there are more of them near the leading and trailing edge, where the flow changes fastest.
+
+**Trailing edge.** The analyses (in-house and XFOIL) use the original NACA formula, which leaves a small gap at the trailing edge (0.0025 of the chord for t = 0.12). The airfoil you get back (`.dat`, plots, CAD and mesh files) has a closed, sharp trailing edge: the last thickness coefficient is −0.1036 instead of −0.1015, so upper and lower surface end at the same point. The two shapes differ only near the trailing edge, by at most that gap. Why not analyse the closed shape too: on a sharp trailing edge XFOIL's viscous solution jumps between two results (see [Values and why](#values-and-why)).
 
 ### 2. Aerodynamics
 - **In-house:** a source + vortex panel method. The surface is split into straight panels; each panel carries its own (uniformly distributed) source strength and all panels share one (uniformly distributed) vortex strength. The Kutta condition at the trailing edge closes the system. Lift comes from the total circulation (Kutta–Joukowski). This solver was first written in MATLAB (`_Original_projects/Original_Matlab_Project/Prova_finale.m`) and then ported to Python.
@@ -136,6 +144,15 @@ Select the solver:
 2. XFOIL (viscous, slower, gives drag)
 ```
 
+You can skip it by choosing the solver on the command line, which is handy when you launch several cases from a script:
+
+```bash
+python run.py --solver inhouse
+python run.py --solver xfoil
+```
+
+`python run.py --help` lists the options. Without `--solver` the question is asked as above, or the solver is taken from the input file (see [Input file](#input-file)).
+
 Then the setup, the same for both solvers:
 
 | Prompt | Default | Notes |
@@ -146,11 +163,45 @@ Then the setup, the same for both solvers:
 | Angle of attack | 4.0° | |
 | Objective | 1 | XFOIL only: `1` = minimum Cd at a target Cl, `2` = maximum Cl with a Cd limit |
 | Target Cl | 0.8 | Asked with objective 1, and always with the in-house solver |
-| Maximum Cd | 0.02 | XFOIL, objective 2 only |
+| Maximum Cd | 0.006 | XFOIL, objective 2 only |
 | Bounding box max height | 0.3 m | Maximum total height of the airfoil (thickness + camber) |
 | Number of panels | 160 | 60 = fast, 160 = accurate |
 | Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
 | Span for the 3D export | same as the chord | Length of the extruded wing in the STL file, in metres |
+
+#### Input file
+
+Instead of answering the questions, you can write every input in a file and run:
+
+```bash
+python run.py --input inputs.py
+```
+
+No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in five sections (solver, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
+
+```python
+FLUID = "air"           # "air"    sea level, nu = 1.46e-5 m^2/s, a = 340.3 m/s
+                        # "water"  20 deg C,  nu = 1.00e-6 m^2/s, a = 1482 m/s
+SPEED = 50.0            # [m/s]  design speed
+CHORD = 1.0             # [m]    airfoil chord
+ALPHA = 4.0             # [deg]  angle of attack
+```
+
+| Variable | Same as the prompt | Values |
+|----------|--------------------|--------|
+| `SOLVER` | Solver | `"inhouse"` or `"xfoil"`. `--solver` on the command line replaces it |
+| `FLUID` | Fluid | `"air"` or `"water"` |
+| `SPEED`, `CHORD`, `ALPHA` | Design speed (m/s), chord (m), angle of attack (°) | numbers |
+| `OBJECTIVE` | Objective (XFOIL only) | `"min_cd"` (= 1) or `"max_cl"` (= 2). Ignored with the in-house solver, which always reaches `TARGET_CL` |
+| `TARGET_CL`, `MAX_CD` | Target Cl, maximum Cd | numbers |
+| `MAX_HEIGHT_BOX` | Bounding box max height (m) | number |
+| `NUM_PANELS` | Number of panels | whole number |
+| `SEED` | Random seed | whole number, or `None` for a random seed |
+| `SPAN` | Span for the 3D export (m) | number, or `None` to use the chord |
+
+Every line is optional: a variable that is not in the file takes its default. It is normal Python, so text goes in quotes, `#` starts a comment and you can write expressions (e.g. `SPEED = 180 / 3.6` for 180 km/h); only UPPERCASE names are read as inputs. The run stops with a `[!] Input file ...` message, before any computation, if the file is missing or has a Python error (with the line number), if a variable is unknown (e.g. a typo), if a number is written as text, or if a choice is not one of those listed. The values themselves are not checked any further, exactly as with the questions.
+
+At the end of a run with a random seed, the message tells you the `SEED = N` line to set in the file to repeat the run.
 
 While it runs, you see one table row per evaluated airfoil:
 
@@ -222,7 +273,7 @@ Results/Re<Reynolds>_Alpha<angle>_CdMax<limit>_xfoil_seed<N>/      (XFOIL, maxim
 
 | File | Content |
 |------|---------|
-| `airfoil_NACA_xxxx.dat` | Airfoil coordinates (x y), XFOIL-compatible. The first line is the name with the exact m, p, t |
+| `airfoil_NACA_xxxx.dat` | Airfoil coordinates (x y), closed trailing edge, in XFOIL's format. The first line is the name with the exact m, p, t. To analyse it in XFOIL yourself, mind that its viscous results on a sharp trailing edge are not reliable (see [Values and why](#values-and-why)) |
 | `geometry_NACA_xxxx.svg` | Airfoil shape |
 | `pressure_distribution_NACA_xxxx.svg` | Cp on upper and lower surface |
 | `lift_distribution_NACA_xxxx.svg` | ΔCp = Cp,lower − Cp,upper along the chord (both taken at the same x/c) |
@@ -230,7 +281,7 @@ Results/Re<Reynolds>_Alpha<angle>_CdMax<limit>_xfoil_seed<N>/      (XFOIL, maxim
 | `optimization_history.svg` | How m, p, t and the score changed during the search |
 | `aerodynamic_data_NACA_xxxx.csv` | Global coefficients, exact m, p, t and Cp distribution |
 | `export/airfoil_NACA_xxxx.dxf` | CAD: closed 2D profile in mm, ready to extrude |
-| `export/airfoil_NACA_xxxx_mm.csv` | CAD: list of points `x,y,z` in mm (z = 0), trailing edge left open |
+| `export/airfoil_NACA_xxxx_mm.csv` | CAD: list of points `x,y,z` in mm (z = 0); the first and the last point are the trailing edge |
 | `export/airfoil_NACA_xxxx_surface.vtk` | ParaView: airfoil contour in m with Cp and V/V∞ (in-house panel method) |
 | `export/airfoil_NACA_xxxx_wing.stl` | OpenFOAM, CAD, 3D printing: the airfoil extruded along z (closed surface, in m) |
 
@@ -249,8 +300,8 @@ The validation script saves in `Results/validation/Re<Reynolds>_Mach<Mach>/`:
 The files in `export/` use the chord you entered, so they already have the real size.
 
 **CAD**
-- The easiest route is the **DXF**: import or insert it into a sketch on the plane you want. It is in millimetres and already closed (a spline through the points plus a short line at the trailing edge), so you can extrude it straight away. For a tapered or twisted wing, place scaled or rotated copies on parallel planes and use a loft.
-- The **CSV** is for CAD tools that build a curve from a list of points. It is comma-separated, in millimetres, without a header. The trailing edge is left open: close it with a line in the sketch. Check which separator and units your CAD expects before importing.
+- The easiest route is the **DXF**: import or insert it into a sketch on the plane you want. It is in millimetres and already closed (one spline that starts and ends at the trailing edge), so you can extrude it straight away. For a tapered or twisted wing, place scaled or rotated copies on parallel planes and use a loft.
+- The **CSV** is for CAD tools that build a curve from a list of points. It is comma-separated, in millimetres, without a header. The first and the last point are both the trailing edge, so the curve is closed (some CAD tools want the last point removed or a "closed curve" option instead). Check which separator and units your CAD expects before importing.
 - The **STL** opens as a mesh body: fine for 3D printing or as a reference, but not editable like a solid.
 
 **ParaView**
@@ -274,6 +325,16 @@ python tests/baseline_check.py
 ```
 
 It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three angles of attack with a saved reference. If everything matches it ends with `All 24 quantities match the baseline`. If a change in results is intended, delete `tests/baseline_reference.json` and create a new one with `python tests/baseline_check.py --generate`.
+
+If you touch anything that the optimization or the terminal output depends on (search, scores, messages, inputs, export), also run:
+
+```bash
+python tests/terminal_regression_check.py
+```
+
+It runs `python run.py --input tests/regression_inputs.py` (in-house solver, default conditions, seed 2412, about 5 s) and compares the whole terminal output, line by line, with `tests/terminal_regression_reference.txt`: every evaluated airfoil with its Cl and score, the final airfoil, the messages and the export summary. The repository path is replaced by `<repo>` and `\` by `/`, so the reference is the same on every computer. If everything matches it ends with `Terminal output identical to the reference`; otherwise it prints the lines that changed. If the change is intended, delete the reference and create a new one with `python tests/terminal_regression_check.py --generate`. Like any run, it writes `Results/Re3424658_Alpha4.0_Cl0.8_inhouse_seed2412/`.
+
+XFOIL is not part of this test: its output depends on the XFOIL executable and the platform. A different numpy version could, in rare cases, change the last printed digit of a value: if only such digits differ, check that the change comes from the environment and not from the code, then regenerate the reference.
 
 ---
 
@@ -353,8 +414,8 @@ Special values in the Cl column:
 | Solver / objective | Score | Unit |
 |--------------------|-------|------|
 | In-house | (10 · (Cl − Cl_target))² | none |
-| XFOIL, minimum Cd | Cd · 10⁴ + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
-| XFOIL, maximum Cl | −Cl + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
+| XFOIL, minimum Cd | Cd · 10⁴ + 10⁶ · Cl excess + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
+| XFOIL, maximum Cl | −Cl + 10⁴ · Cd excess + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
 | Failed or timeout | 10⁹ + a small term that is lower for airfoils closer to t = 0.12 and m = 0.05 | none |
 | Outside the box | 10⁹ + ((height − box) · 1000)² | none |
 
@@ -397,9 +458,11 @@ Special values in the Cl column:
 | Small term towards t = 0.12, m = 0.05 | Failed airfoils | From the original code: among failed airfoils it prefers usual shapes, so the search moves back towards shapes that converge |
 | (excess · 1000)² | Out-of-box penalty | Grows with the excess height, so the search knows which way to go back |
 | ± 0.005 | Cl tolerance, minimum-Cd objective | 0.6% of a Cl of 0.8: well above XFOIL's resolution (0.0001) and small enough to keep the target meaningful. An exact Cl would be impossible to hit numerically |
-| 10⁴ | Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts. Near the target, candidate airfoils differ by about 20 counts in our runs, so going outside the tolerance never pays off |
-| 10⁴ | Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs as much as 1.0 of Cl |
-| Cd 0.02 | Default limit, maximum-Cl objective | From the old "maximum tolerable Cd" prompt. At 4° it is too loose to matter (the best airfoil had Cd ≈ 0.007): still to be decided |
+| 10⁶ | Linear Cl penalty weight, minimum-Cd objective | 0.0001 of Cl outside the tolerance costs 100 drag counts, from the very edge of the tolerance. With the quadratic term alone the penalty is flat at the edge, so going slightly outside paid off: with seed 657086 the final Cl was 0.7947 (0.0003 outside = 9 counts of penalty) for about 9 counts of Cd saved. With the linear term the same run ends at Cl 0.7989. Over six seeds (657086, 1, 2, 3, 42, 2412) it changes only that run: the other five give the same airfoil as before |
+| 10⁴ | Quadratic Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts more, and the penalty grows fast further out |
+| 10⁴ | Linear Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs 1.0 of Cl, from the very edge of the limit. Near the default limit the search gains about 0.024 of Cl per count, so going above it never pays off. With the quadratic term alone the penalty was flat at the edge: with the default limit the final Cd was 0.00601 (seed 42), and with a limit of 0.0065 it was up to 2.4 counts above |
+| 10⁴ | Quadratic Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs 1.0 of Cl more, and the penalty grows fast further out |
+| Cd 0.006 | Default limit, maximum-Cl objective | Chosen so that the limit drives the result at the default conditions. Without an effective limit (the old default 0.02) the search ends at the highest camber of the search range, Cl ≈ 1.59 with Cd ≈ 0.007, so any limit above ≈ 0.007 has no effect. With 0.006 the final Cd sits just below the limit (0.00597 and 0.00596) and Cl ≈ 1.21–1.28 (seeds 42 and 1). The starting airfoil NACA 2412 (Cd 0.00591) is inside the limit, so the search starts from an allowed airfoil. Below the Cd of NACA 2412 (e.g. 0.0055) runs with different seeds ended far apart (Cl 0.82 and 0.70, measured before the linear Cd penalty was added) |
 | Ncrit = 9 | XFOIL | XFOIL's default, the usual value for an average wind tunnel |
 | ITER 500 | XFOIL | Maximum viscous iterations per angle, from the original code |
 | 1° steps up to the target angle | XFOIL | XFOIL converges more easily when each angle starts from the previous solution. From the original code |
@@ -411,7 +474,8 @@ Special values in the Cl column:
 | mm (DXF, CSV), m (VTK, STL) | Export units | CAD programs work in millimetres; OpenFOAM and ParaView in SI units |
 | Span = chord | Default for the STL | A square planform is a neutral starting point; it only sets the length of the extrusion |
 | 399 points | DXF, CSV, STL | Same points as the `.dat` file. The DXF spline stays within 0.01 mm of the exact NACA shape for a 250 mm chord |
-| Straight line / flat faces at the trailing edge | DXF, STL | Closes the small gap of the NACA formula so the profile can be extruded and the STL is watertight. The geometry itself is not changed |
+| −0.1036 | Last thickness coefficient of the exported airfoil (closed trailing edge) | Standard closed-trailing-edge variant of the NACA formula: the coefficients add up to zero, so the thickness is zero at x/c = 1 and the profile is closed for CAD, STL and meshing |
+| −0.1015 (open trailing edge) | Geometry used by the analyses | The original NACA formula, also used by XFOIL's own NACA airfoils. With a sharp trailing edge XFOIL's viscous solution is not reliable: for m = 0.03, p = 0.4 and t from 0.1200 to 0.1240 (steps of 0.0004) Cl jumped between 0.80 and 0.65, with or without XFOIL's own re-paneling, while with the open trailing edge it goes smoothly from 0.826 to 0.820. In an optimization test (six seeds, minimum Cd at Cl 0.8) the closed trailing edge gave a worse airfoil in four runs out of six (up to Cd 0.0116 instead of 0.0065) and one run outside the Cl tolerance |
 | −4° to 10°, step 2° | Validation sweep | From the original code |
 
 ### Conditions
@@ -419,8 +483,8 @@ Special values in the Cl column:
 - **No valid result:** if no airfoil was analysed successfully, the run stops with `[!] No airfoil could be analysed successfully` instead of reporting a meaningless airfoil.
 - **Final checks (XFOIL):** after the search, XFOIL runs once more on the best airfoil. A warning appears if it does not converge, if it converges at another angle, if Cl is outside the tolerance (minimum-Cd objective) or if Cd is above the limit (maximum-Cl objective).
 - **Missing libraries:** the script asks before installing them with pip. Answer no and it prints the command to run yourself.
-- **Invalid input:** the optimizers stop. The validation script instead falls back to fixed values (Re 10⁶, Mach 0, alpha −4° to 10°), which are not the same as its prompt defaults.
-- **Trailing edge:** the standard NACA formula leaves a small gap at the trailing edge (0.0025 of the chord for t = 0.12). The code keeps it as it is; whether to close it is still to be decided.
+- **Invalid input:** the optimizers stop. With an input file they stop before the environment checks, with a message that names the wrong key. The validation script instead falls back to fixed values (Re 10⁶, Mach 0, alpha −4° to 10°), which are not the same as its prompt defaults.
+- **Trailing edge:** open in the analyses, closed (sharp) in the airfoil you get back (`.dat`, plots, DXF, CSV, STL), see [Geometry](#1-geometry). The ParaView file (`.vtk`) carries the Cp of the analysis, so its points are those of the open trailing edge. A contour with a gap would still be exported closed (a straight line in the DXF, flat faces in the STL).
 
 ## Credits
 

@@ -2,15 +2,39 @@ import os
 import csv
 import sys
 import random
+import argparse
 
 # Only the standard library is imported here: numpy/scipy/matplotlib are imported
 # inside main(), after perform_all_checks() has verified (or installed) them.
 from naca_core.pre_run_checks import perform_all_checks
+from naca_core.input_file import (INHOUSE, XFOIL, FLUIDS, DEFAULTS, InputFileError,
+                                  flow_conditions, load_input_file)
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-INHOUSE = "inhouse"
-XFOIL = "xfoil"
+
+def parse_arguments(argv=None):
+    """Command-line options. Every option is optional: what is not given is asked in the terminal."""
+    parser = argparse.ArgumentParser(
+        description="Find a NACA 4-digit airfoil for the target conditions (in-house panel method or XFOIL).")
+    parser.add_argument("--solver", choices=(INHOUSE, XFOIL),
+                        help="solver to use; if omitted, it is asked in the terminal "
+                             "(or taken from the input file)")
+    parser.add_argument("--input", metavar="FILE",
+                        help="Python input file (e.g. inputs.py): no questions are asked in the terminal. "
+                             "--solver, if given, replaces the solver of the file")
+    return parser.parse_args(argv)
+
+
+def random_seed():
+    """Random seed for a run, printed at the end so the run can be repeated."""
+    return random.SystemRandom().randrange(1, 1_000_000)
+
+
+def print_conditions(reynolds, mach):
+    print(f"\n [i] Calculated Conditions:")
+    print(f"    - Reynolds Number: {reynolds:,.0f}")
+    print(f"    - Mach Number: {mach:.3f}")
 
 
 def get_solver_selection():
@@ -29,10 +53,7 @@ def get_solver_selection():
 
 
 def get_fluid_selection():
-    fluids = {
-        '1': {'name': 'Air (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
-        '2': {'name': 'Water (20 degrees)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
-    }
+    fluids = {'1': FLUIDS['air'], '2': FLUIDS['water']}
 
     while True:
         print("\nSelect the operating fluid:")
@@ -40,7 +61,7 @@ def get_fluid_selection():
         print("2. Water (Kinematic viscosity: 1.00e-6 m^2/s, Speed of sound: 1482.0 m/s)")
         choice = input("Choice (1 or 2) [default: 1]: ").strip()
         if not choice:
-            return fluids['1']
+            return FLUIDS[DEFAULTS['fluid']]
         if choice in fluids:
             return fluids[choice]
         print("Error: invalid selection.")
@@ -53,20 +74,17 @@ def get_user_input(solver):
     print("======================================================================")
 
     fluid = get_fluid_selection()
-    fluid_viscosity = fluid['viscosity']
-    speed_of_sound = fluid['speed_of_sound']
+    d = DEFAULTS  # Enter = default value, the same used for the keys missing from an input file
 
     try:
-        speed = float(input("Enter design speed (m/s) [e.g., 50]: ") or 50)
-        chord = float(input("Enter airfoil chord (m) [e.g., 1.0]: ") or 1.0)
+        speed = float(input(f"Enter design speed (m/s) [e.g., {d['speed']}]: ") or d['speed'])
+        chord = float(input(f"Enter airfoil chord (m) [e.g., {d['chord']}]: ") or d['chord'])
 
-        target_reynolds = (speed * chord) / fluid_viscosity
-        target_mach = speed / speed_of_sound
-        print(f"\n [i] Calculated Conditions:")
-        print(f"    - Reynolds Number: {target_reynolds:,.0f}")
-        print(f"    - Mach Number: {target_mach:.3f}")
+        target_reynolds, target_mach = flow_conditions(fluid, speed, chord)
+        print_conditions(target_reynolds, target_mach)
 
-        target_alpha = float(input("\nEnter target angle of attack (degrees) [e.g., 4.0]: ") or 4.0)
+        target_alpha = float(input(f"\nEnter target angle of attack (degrees) [e.g., {d['alpha']}]: ")
+                             or d['alpha'])
 
         # The objective can be chosen only with a solver that computes Cd (XFOIL for now)
         objective_choice, target_cl, max_cd = "1", None, None
@@ -78,14 +96,17 @@ def get_user_input(solver):
             if objective_choice not in ("1", "2"):
                 raise ValueError("invalid objective")
         if objective_choice == "1":
-            target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
+            target_cl = float(input(f"Enter target lift coefficient (Cl) [e.g., {d['target_cl']}]: ")
+                              or d['target_cl'])
         else:
-            max_cd = float(input("Enter maximum drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
+            max_cd = float(input(f"Enter maximum drag coefficient (Cd) [e.g., {d['max_cd']}]: ") or d['max_cd'])
 
-        max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
-        num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
+        max_height_box = float(input(f"Enter Bounding Box max height (m) [e.g., {d['max_height_box']}]: ")
+                               or d['max_height_box'])
+        num_panels = int(input(f"Enter number of panels (Low=60, Medium=100, High=160) "
+                               f"[default: {d['num_panels']}]: ") or d['num_panels'])
         seed_text = input("Enter random seed [default: random]: ").strip()
-        seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
+        seed = int(seed_text) if seed_text else random_seed()
         span_text = input(f"Enter span for the 3D export (m) [default: {chord} = chord]: ").strip()
         span = float(span_text) if span_text else chord
 
@@ -103,13 +124,32 @@ def get_user_input(solver):
 
 def main():
     """Main execution block for the aerodynamic suite."""
+    args = parse_arguments()
+
+    # The input file is read and checked first (standard library only): a mistake in the file
+    # stops the run before the environment checks
+    file_inputs = None
+    if args.input:
+        try:
+            file_inputs = load_input_file(args.input, solver=args.solver)
+        except InputFileError as e:
+            print(f"[!] Input file '{args.input}': {e}")
+            sys.exit(1)
+
     # The solver is chosen first: the XFOIL check below is needed only for XFOIL
-    solver = get_solver_selection()
+    if args.solver:
+        solver = args.solver
+        print(f"[i] Solver: {solver} (from the command line)")
+    elif file_inputs:
+        solver = file_inputs['solver']
+        print(f"[i] Solver: {solver} (from the input file)")
+    else:
+        solver = get_solver_selection()
 
     # Run all dependency and environment checks first
     perform_all_checks(require_xfoil=(solver == XFOIL))
 
-    from naca_core.airfoil import naca4_airfoil, save_airfoil_coordinates
+    from naca_core.airfoil import NACA4, save_airfoil_coordinates
     from naca_core.optimization import print_phase
     from naca_core.export import export_all
     from naca_core.panel_method import run_panel_analysis, surface_distributions
@@ -123,10 +163,19 @@ def main():
         from naca_core.xfoil_optimizer import MIN_CD, MAX_CL, CL_TOLERANCE
         from naca_core.xfoil import XFoilAnalysis
 
-    # Get aerodynamic targets from the user
-    inputs = get_user_input(solver)
-    if inputs is None:
-        sys.exit(1)
+    # Get aerodynamic targets from the input file or from the user
+    if file_inputs:
+        inputs = file_inputs
+        if inputs['seed'] is None:
+            inputs['seed'] = random_seed()
+        print("\n======================================================================")
+        print(f"                SETUP FROM INPUT FILE: {args.input}")
+        print("======================================================================")
+        print_conditions(inputs['reynolds'], inputs['mach'])
+    else:
+        inputs = get_user_input(solver)
+        if inputs is None:
+            sys.exit(1)
 
     target_reynolds = inputs['reynolds']
     target_mach = inputs['mach']
@@ -138,6 +187,7 @@ def main():
     num_panels = inputs['num_panels']
     seed = inputs['seed']
     span = inputs['span']
+    family = NACA4  # airfoil family: parameters, search limits, geometry and name
 
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
@@ -161,7 +211,8 @@ def main():
             chord=chord,
             max_height_box=max_height_box,
             num_panels=num_panels,
-            seed=seed
+            seed=seed,
+            family=family
         )
     else:
         from naca_core.inhouse_optimizer import NacaOptimizer as InhouseOptimizer
@@ -172,24 +223,29 @@ def main():
             max_height_box=max_height_box,
             chord=chord,
             num_panels=num_panels,
-            seed=seed
+            seed=seed,
+            family=family
         )
 
     result = optimizer.optimize(max_iter=50)
 
     # Abort if no airfoil was analysed successfully: result.x would only be the minimum of the penalties
     history = optimizer.get_optimization_history()
-    if not any(isinstance(row[4], float) for row in history):
+    if not any(isinstance(row[-3], float) for row in history):  # row[-3] = Cl
         print("\n[!] No airfoil could be analysed successfully, so there is no valid result.")
         print("    Check the solver setup and the input values, then run again.")
         return
 
     # --- Process and Save Optimization Results ---
-    opt_m, opt_p, opt_t = result.x
-    naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
-    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
-    print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
-    print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
+    opt_params = list(result.x)
+    airfoil_name = family.name(opt_params)         # e.g. "NACA 2412"
+    file_tag = airfoil_name.replace(" ", "_")      # e.g. "NACA_2412", used in the file names
+    print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: {airfoil_name}")
+    print(f"[i] Exact parameters: {family.describe(opt_params)}")
+    if file_inputs:
+        print(f"[i] Random seed: {seed} (set SEED = {seed} in the input file to repeat this run)")
+    else:
+        print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
     # One Results/ folder for both solvers: Re<Re>_Alpha<alpha>_<objective>_<solver>_seed<N>
     objective_tag = f"Cl{target_cl}" if target_cl is not None else f"CdMax{max_cd}"
@@ -198,22 +254,23 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")
 
-    # Save optimized airfoil coordinates
-    X_opt, Y_opt, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=200)
-    airfoil_filename = os.path.join(results_dir, f"airfoil_NACA_{naca_opt_str}.dat")
-    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename,
-                             header=f"NACA {naca_opt_str} (m={opt_m:.6f} p={opt_p:.6f} t={opt_t:.6f})")
+    # Save optimized airfoil coordinates. The delivered geometry (.dat, plot, CAD/mesh export) has a
+    # closed trailing edge; the analyses use the open one (see naca_core.airfoil.naca4_airfoil)
+    X_opt, Y_opt = family.coordinates(opt_params, 200, closed_te=True)
+    airfoil_filename = os.path.join(results_dir, f"airfoil_{file_tag}.dat")
+    exact_params = " ".join(f"{n}={v:.6f}" for n, v in zip(family.params, opt_params))
+    save_airfoil_coordinates(X_opt, Y_opt, airfoil_filename, header=f"{airfoil_name} ({exact_params})")
 
     # Save optimization history
     history_filename = os.path.join(results_dir, "optimization_history.csv")
     with open(history_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Eval', 'm', 'p', 't', 'Cl', 'Cd', 'Score'])
+        writer.writerow(['Eval', *family.params, 'Cl', 'Cd', 'Score'])
         writer.writerows(history)
 
     # Plot and save the optimization history
     history_plot_filename = os.path.join(results_dir, "optimization_history.svg")
-    plot_optimization_history(history, save_path=history_plot_filename)
+    plot_optimization_history(history, family, save_path=history_plot_filename)
 
     # --- PHASE 2: AIRFOIL ANALYSIS ---
     print_phase("PHASE 2: AIRFOIL ANALYSIS")
@@ -221,14 +278,14 @@ def main():
     print("\n[+] Generating plots and extracting final aerodynamic data...")
 
     # 1. Plot airfoil geometry
-    airfoil_plot_filename = os.path.join(results_dir, f"geometry_NACA_{naca_opt_str}.svg")
-    plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: NACA {naca_opt_str}", save_path=airfoil_plot_filename)
+    airfoil_plot_filename = os.path.join(results_dir, f"geometry_{file_tag}.svg")
+    plot_airfoil_geometry(X_opt, Y_opt, title=f"Optimized Airfoil: {airfoil_name}", save_path=airfoil_plot_filename)
 
     # --- PHASE 3: POTENTIAL & PRESSURE ANALYSIS ---
     print_phase("PHASE 3: POTENTIAL & PRESSURE ANALYSIS")
     try:
         # Regenerate airfoil with panel-specific points if needed
-        X_panel, Y_panel, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
+        X_panel, Y_panel = family.coordinates(opt_params, int(num_panels/2)+1)
 
         panel_results = run_panel_analysis(X_panel, Y_panel, target_alpha)
 
@@ -236,7 +293,7 @@ def main():
             # Final XFOIL run on the optimized airfoil. The last row of the history is not used:
             # it can be a finite-difference or line-search point instead of result.x.
             # Same geometry (and paneling) as in the optimizer
-            X_xfoil, Y_xfoil, _ = naca4_airfoil(opt_m, opt_p, opt_t, num_points=int(num_panels/2)+1)
+            X_xfoil, Y_xfoil = family.coordinates(opt_params, int(num_panels/2)+1)
             final_analysis = XFoilAnalysis(airfoil_name="final", alpha=target_alpha,
                                            reynolds=target_reynolds, mach=target_mach)
             final_cl, final_cd, final_alpha = final_analysis.run_analysis(X_xfoil, Y_xfoil)
@@ -260,23 +317,23 @@ def main():
             print("Cd:               not available (potential flow)")
         print("-------------------------\n")
 
-        cp_plot_filename = os.path.join(results_dir, f"pressure_distribution_NACA_{naca_opt_str}.svg")
-        plot_pressure_coefficient(panel_results, target_alpha, f"NACA {naca_opt_str}", save_path=cp_plot_filename)
+        cp_plot_filename = os.path.join(results_dir, f"pressure_distribution_{file_tag}.svg")
+        plot_pressure_coefficient(panel_results, target_alpha, airfoil_name, save_path=cp_plot_filename)
 
-        lift_dist_filename = os.path.join(results_dir, f"lift_distribution_NACA_{naca_opt_str}.svg")
-        plot_lift_distribution(panel_results, target_alpha, f"NACA {naca_opt_str}", save_path=lift_dist_filename)
+        lift_dist_filename = os.path.join(results_dir, f"lift_distribution_{file_tag}.svg")
+        plot_lift_distribution(panel_results, target_alpha, airfoil_name, save_path=lift_dist_filename)
 
         # Save CSV with Cp, Cl (and XFOIL Cl, Cd)
-        csv_filename = os.path.join(results_dir, f"aerodynamic_data_NACA_{naca_opt_str}.csv")
+        csv_filename = os.path.join(results_dir, f"aerodynamic_data_{file_tag}.csv")
         with open(csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["# Global Coefficients"])
             if solver == XFOIL:
-                writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", "m", "p", "t", "Seed"])
-                writer.writerow([final_cl, final_cd, panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
+                writer.writerow(["XFOIL_Cl", "XFOIL_Cd", "Potential_Cl", *family.params, "Seed"])
+                writer.writerow([final_cl, final_cd, panel_results['cl_potential'], *opt_params, seed])
             else:
-                writer.writerow(["Potential_Cl", "m", "p", "t", "Seed"])
-                writer.writerow([panel_results['cl_potential'], opt_m, opt_p, opt_t, seed])
+                writer.writerow(["Potential_Cl", *family.params, "Seed"])
+                writer.writerow([panel_results['cl_potential'], *opt_params, seed])
             writer.writerow([])
             writer.writerow(["# Surface Distributions (Cp_Lower interpolated at the upper-surface x/c)"])
             writer.writerow(["x/c", "Cp_Upper", "Cp_Lower", "Delta_Cp"])
@@ -289,7 +346,7 @@ def main():
         # --- CAD / ParaView / OpenFOAM export ---
         print("\n[+] Exporting files for CAD, ParaView and OpenFOAM...")
         export_paths = export_all(X_opt, Y_opt, panel_results, chord, span, results_dir,
-                                  name=f"airfoil_NACA_{naca_opt_str}")
+                                  name=f"airfoil_{file_tag}")
         print(f"    - CAD (mm):        {os.path.basename(export_paths['dxf'])}, {os.path.basename(export_paths['csv'])}")
         print(f"    - ParaView (m):    {os.path.basename(export_paths['vtk'])}")
         print(f"    - OpenFOAM/3D (m): {os.path.basename(export_paths['stl'])} (span {span} m)")
