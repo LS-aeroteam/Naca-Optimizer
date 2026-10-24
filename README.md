@@ -19,9 +19,11 @@ What every symbol, message and number means, and why each value was chosen, is e
 
 ```
 Naca-optimizer/
-├── run.py                          # Start here: python run.py (you choose the solver)
+├── run.py                          # Start here: python run.py (you choose the solver, or --solver)
+├── inputs.py                       # Input file: python run.py --input inputs.py (no questions)
 ├── naca_core/                      # All the code
 │   ├── __init__.py
+│   ├── input_file.py               # Defaults, fluids and the reader of the input file
 │   ├── panel_method.py             # In-house solver (source + vortex panel method)
 │   ├── xfoil.py                    # XFOIL solver: writes the script, runs XFOIL, reads the polar
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
@@ -136,6 +138,15 @@ Select the solver:
 2. XFOIL (viscous, slower, gives drag)
 ```
 
+You can skip it by choosing the solver on the command line, which is handy when you launch several cases from a script:
+
+```bash
+python run.py --solver inhouse
+python run.py --solver xfoil
+```
+
+`python run.py --help` lists the options. Without `--solver` the question is asked as above, or the solver is taken from the input file (see [Input file](#input-file)).
+
 Then the setup, the same for both solvers:
 
 | Prompt | Default | Notes |
@@ -151,6 +162,40 @@ Then the setup, the same for both solvers:
 | Number of panels | 160 | 60 = fast, 160 = accurate |
 | Random seed | random | Enter a number to repeat a run exactly. The seed used is printed at the end and saved in the CSV |
 | Span for the 3D export | same as the chord | Length of the extruded wing in the STL file, in metres |
+
+#### Input file
+
+Instead of answering the questions, you can write every input in a file and run:
+
+```bash
+python run.py --input inputs.py
+```
+
+No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in five sections (solver, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
+
+```python
+FLUID = "air"           # "air"    sea level, nu = 1.46e-5 m^2/s, a = 340.3 m/s
+                        # "water"  20 deg C,  nu = 1.00e-6 m^2/s, a = 1482 m/s
+SPEED = 50.0            # [m/s]  design speed
+CHORD = 1.0             # [m]    airfoil chord
+ALPHA = 4.0             # [deg]  angle of attack
+```
+
+| Variable | Same as the prompt | Values |
+|----------|--------------------|--------|
+| `SOLVER` | Solver | `"inhouse"` or `"xfoil"`. `--solver` on the command line replaces it |
+| `FLUID` | Fluid | `"air"` or `"water"` |
+| `SPEED`, `CHORD`, `ALPHA` | Design speed (m/s), chord (m), angle of attack (°) | numbers |
+| `OBJECTIVE` | Objective (XFOIL only) | `"min_cd"` (= 1) or `"max_cl"` (= 2). Ignored with the in-house solver, which always reaches `TARGET_CL` |
+| `TARGET_CL`, `MAX_CD` | Target Cl, maximum Cd | numbers |
+| `MAX_HEIGHT_BOX` | Bounding box max height (m) | number |
+| `NUM_PANELS` | Number of panels | whole number |
+| `SEED` | Random seed | whole number, or `None` for a random seed |
+| `SPAN` | Span for the 3D export (m) | number, or `None` to use the chord |
+
+Every line is optional: a variable that is not in the file takes its default. It is normal Python, so text goes in quotes, `#` starts a comment and you can write expressions (e.g. `SPEED = 180 / 3.6` for 180 km/h); only UPPERCASE names are read as inputs. The run stops with a `[!] Input file ...` message, before any computation, if the file is missing or has a Python error (with the line number), if a variable is unknown (e.g. a typo), if a number is written as text, or if a choice is not one of those listed. The values themselves are not checked any further, exactly as with the questions.
+
+At the end of a run with a random seed, the message tells you the `SEED = N` line to set in the file to repeat the run.
 
 While it runs, you see one table row per evaluated airfoil:
 
@@ -419,7 +464,7 @@ Special values in the Cl column:
 - **No valid result:** if no airfoil was analysed successfully, the run stops with `[!] No airfoil could be analysed successfully` instead of reporting a meaningless airfoil.
 - **Final checks (XFOIL):** after the search, XFOIL runs once more on the best airfoil. A warning appears if it does not converge, if it converges at another angle, if Cl is outside the tolerance (minimum-Cd objective) or if Cd is above the limit (maximum-Cl objective).
 - **Missing libraries:** the script asks before installing them with pip. Answer no and it prints the command to run yourself.
-- **Invalid input:** the optimizers stop. The validation script instead falls back to fixed values (Re 10⁶, Mach 0, alpha −4° to 10°), which are not the same as its prompt defaults.
+- **Invalid input:** the optimizers stop. With an input file they stop before the environment checks, with a message that names the wrong key. The validation script instead falls back to fixed values (Re 10⁶, Mach 0, alpha −4° to 10°), which are not the same as its prompt defaults.
 - **Trailing edge:** the standard NACA formula leaves a small gap at the trailing edge (0.0025 of the chord for t = 0.12). The code keeps it as it is; whether to close it is still to be decided.
 
 ## Credits
