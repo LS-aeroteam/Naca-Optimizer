@@ -1,5 +1,5 @@
 ## Geometry (Geometry Engine)
-- [ ]  **NACA 5-digit**: Implement the mathematical formulation that generates the NACA 5-digit series airfoils.
+- [x]  **NACA 5-digit**: Implement the mathematical formulation that generates the NACA 5-digit series airfoils.
 - [ ]  **Asymmetric airfoils**: Support independent curves for the upper and lower surface.
 - [x]  **Trailing-edge closure**: Set the geometric standard for the trailing edge (open vs closed), based on the requirements of the later mesh generation.
 

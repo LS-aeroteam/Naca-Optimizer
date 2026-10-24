@@ -1,4 +1,45 @@
 import numpy as np
+from scipy.optimize import brentq
+
+
+def _cosine_x(chord, num_points):
+    """Cosine spacing: more points near the leading and trailing edge."""
+    beta = np.linspace(0, np.pi, num_points)
+    return chord * (0.5 * (1 - np.cos(beta)))
+
+
+def _naca_thickness(x, t_param, chord, closed_te):
+    """NACA 4/5-digit thickness distribution (half thickness), open or closed trailing edge."""
+    # Last coefficient: -0.1015 (original, open TE) or -0.1036 (closed TE)
+    a4 = 0.1036 if closed_te else 0.1015
+    yt = 5 * t_param * chord * (
+        0.2969 * np.sqrt(x / chord)
+        - 0.1260 * (x / chord)
+        - 0.3516 * (x / chord) ** 2
+        + 0.2843 * (x / chord) ** 3
+        - a4 * (x / chord) ** 4
+    )
+    if closed_te:
+        # The coefficients add up to zero, so yt = 0 at x = chord: set it exactly, otherwise round-off
+        # leaves about -1e-17 and the upper surface ends a hair below the lower one
+        yt[-1] = 0.0
+    return yt
+
+
+def _contour(x, yt, yc, dyc_dx):
+    """
+    Thickness applied perpendicular to the mean line, then one closed contour
+    TE -> upper -> LE -> lower -> TE. Returns X, Y and (xu, yu, xl, yl).
+    """
+    theta = np.arctan(dyc_dx)
+    xu = x - yt * np.sin(theta)
+    yu = yc + yt * np.cos(theta)
+    xl = x + yt * np.sin(theta)
+    yl = yc - yt * np.cos(theta)
+    X = np.concatenate((np.flip(xu), xl[1:]))
+    Y = np.concatenate((np.flip(yu), yl[1:]))
+    return X, Y, (xu, yu, xl, yl)
+
 
 def naca4_airfoil(m_param, p_param, t_param, chord=1.0, num_points=100, closed_te=False):
     """
@@ -28,55 +69,74 @@ def naca4_airfoil(m_param, p_param, t_param, chord=1.0, num_points=100, closed_t
             - np.ndarray: Y coordinates of the airfoil surface.
             - tuple: A detailed breakdown of (xu, yu, xl, yl) coordinates.
     """
-    beta = np.linspace(0, np.pi, num_points)
-    x = chord * (0.5 * (1 - np.cos(beta)))
-    
-    # Thickness distribution. Last coefficient: -0.1015 (original, open TE) or -0.1036 (closed TE)
-    a4 = 0.1036 if closed_te else 0.1015
-    yt = 5 * t_param * chord * (
-        0.2969 * np.sqrt(x / chord)
-        - 0.1260 * (x / chord)
-        - 0.3516 * (x / chord) ** 2
-        + 0.2843 * (x / chord) ** 3
-        - a4 * (x / chord) ** 4
-    )
-    if closed_te:
-        # The coefficients add up to zero, so yt = 0 at x = chord: set it exactly, otherwise round-off
-        # leaves about -1e-17 and the upper surface ends a hair below the lower one
-        yt[-1] = 0.0
+    x = _cosine_x(chord, num_points)
+    yt = _naca_thickness(x, t_param, chord, closed_te)
 
     if p_param == 0 or m_param == 0:  # Symmetric airfoil
         xu, yu = x, yt
         xl, yl = x, -yt
-    else:  # Cambered airfoil
-        yc = np.zeros_like(x)
-        dyc_dx = np.zeros_like(x)
-        
-        # Front section
-        front_mask = x < p_param * chord
-        if np.any(front_mask):
-            x_front = x[front_mask]
-            yc[front_mask] = (m_param / p_param ** 2) * (2 * p_param * (x_front / chord) - (x_front / chord) ** 2)
-            dyc_dx[front_mask] = (2 * m_param / p_param ** 2) * (p_param - x_front / chord)
+        X = np.concatenate((np.flip(xu), xl[1:]))
+        Y = np.concatenate((np.flip(yu), yl[1:]))
+        return X, Y, (xu, yu, xl, yl)
 
-        # Back section
-        back_mask = x >= p_param * chord
-        if np.any(back_mask):
-            x_back = x[back_mask]
-            yc[back_mask] = (m_param / (1 - p_param) ** 2) * ((1 - 2 * p_param) + 2 * p_param * (x_back / chord) - (x_back / chord) ** 2)
-            dyc_dx[back_mask] = (2 * m_param / (1 - p_param) ** 2) * (p_param - x_back / chord)
-            
-        theta = np.arctan(dyc_dx)
-        xu = x - yt * np.sin(theta)
-        yu = yc + yt * np.cos(theta)
-        xl = x + yt * np.sin(theta)
-        yl = yc - yt * np.cos(theta)
+    # Cambered airfoil
+    yc = np.zeros_like(x)
+    dyc_dx = np.zeros_like(x)
 
-    # Combine to a single closed contour
-    X = np.concatenate((np.flip(xu), xl[1:]))
-    Y = np.concatenate((np.flip(yu), yl[1:]))
-    
-    return X, Y, (xu, yu, xl, yl)
+    # Front section
+    front_mask = x < p_param * chord
+    if np.any(front_mask):
+        x_front = x[front_mask]
+        yc[front_mask] = (m_param / p_param ** 2) * (2 * p_param * (x_front / chord) - (x_front / chord) ** 2)
+        dyc_dx[front_mask] = (2 * m_param / p_param ** 2) * (p_param - x_front / chord)
+
+    # Back section
+    back_mask = x >= p_param * chord
+    if np.any(back_mask):
+        x_back = x[back_mask]
+        yc[back_mask] = (m_param / (1 - p_param) ** 2) * ((1 - 2 * p_param) + 2 * p_param * (x_back / chord) - (x_back / chord) ** 2)
+        dyc_dx[back_mask] = (2 * m_param / (1 - p_param) ** 2) * (p_param - x_back / chord)
+
+    return _contour(x, yt, yc, dyc_dx)
+
+
+def naca5_mean_line_constants(cl_design, p_param):
+    """
+    r and k1 of the NACA 5-digit non-reflex mean line (Abbott & von Doenhoff), for any p.
+
+    r follows from the position of maximum camber, p = r * (1 - sqrt(r / 3)); k1 from the design
+    lift coefficient through the thin-airfoil relation, k1 = 6 * cl / Q(r). With the tabulated r
+    they reproduce the tabulated k1 within 0.03 % for p = 0.15, 0.20, 0.25 (230, 240, 250).
+    """
+    r = brentq(lambda rr: rr * (1 - np.sqrt(rr / 3)) - p_param, p_param, 1.0)
+    q = ((3 * r - 7 * r ** 2 + 8 * r ** 3 - 4 * r ** 4) / np.sqrt(r * (1 - r))
+         - 1.5 * (1 - 2 * r) * (np.pi / 2 - np.arcsin(1 - 2 * r)))
+    return r, 6 * cl_design / q
+
+
+def naca5_airfoil(cl_design, p_param, t_param, chord=1.0, num_points=100, closed_te=False):
+    """
+    Generates the coordinates for a NACA 5-digit airfoil, non-reflex mean line (e.g. NACA 23012).
+
+    Same thickness distribution, point spacing, trailing-edge options and output as naca4_airfoil.
+
+    Args:
+        cl_design (float): Design lift coefficient (first digit * 0.15, e.g. 0.3 for NACA 23012).
+        p_param (float): Position of maximum camber as a fraction of the chord
+            (second digit / 20, e.g. 0.15 for NACA 23012).
+        t_param (float): Maximum thickness as a fraction of the chord (e.g. 0.12 for NACA 23012).
+        chord, num_points, closed_te: as in naca4_airfoil.
+    """
+    x = _cosine_x(chord, num_points)
+    yt = _naca_thickness(x, t_param, chord, closed_te)
+    r, k1 = naca5_mean_line_constants(cl_design, p_param)
+    xc = x / chord
+    front = xc < r
+    yc = chord * np.where(front, k1 / 6 * (xc ** 3 - 3 * r * xc ** 2 + r ** 2 * (3 - r) * xc),
+                          k1 * r ** 3 / 6 * (1 - xc))
+    dyc_dx = np.where(front, k1 / 6 * (3 * xc ** 2 - 6 * r * xc + r ** 2 * (3 - r)), -k1 * r ** 3 / 6)
+    return _contour(x, yt, yc, dyc_dx)
+
 
 class AirfoilFamily:
     """
@@ -141,6 +201,31 @@ NACA4 = AirfoilFamily(
     # From the original code: among failed airfoils it prefers t = 0.12 and m = 0.05
     failure_score=lambda params, penalty: penalty + (0.12 - params[2]) ** 2 * 1e5 + (0.05 - params[0]) ** 2 * 1e5,
 )
+
+
+def _naca5_name(params):
+    cl, p, t = params
+    return f"NACA {int(round(cl / 0.15))}{int(round(p * 20))}0{int(round(t * 100)):02d}"
+
+
+NACA5 = AirfoilFamily(
+    key="naca5",
+    params=("cl_d", "p", "t"),  # cl_d: design lift coefficient (not the Cl computed by the solver)
+    descriptions=("Design Cl", "Camber Position", "Thickness"),
+    # p: range of the standard mean lines (210 to 250); cl up to 0.6 (first digit 4); t as NACA 4
+    bounds=[(0.05, 0.6), (0.05, 0.25), (0.05, 0.25)],
+    initial_guess=[0.3, 0.15, 0.12],  # NACA 23012
+    coordinates=lambda params, num_points, closed_te: naca5_airfoil(*params, num_points=num_points,
+                                                                    closed_te=closed_te)[:2],
+    name=_naca5_name,
+    # Like NACA 4: among failed airfoils it prefers usual shapes, here t = 0.12 and cl = 0.3 (NACA 23012)
+    failure_score=lambda params, penalty: penalty + (0.12 - params[2]) ** 2 * 1e5 + (0.3 - params[0]) ** 2 * 1e3,
+)
+
+
+def get_family(key):
+    """Airfoil family from its name in the input file ("naca4", "naca5")."""
+    return {"naca4": NACA4, "naca5": NACA5}[key]
 
 
 def save_airfoil_coordinates(X, Y, filename, header=None):

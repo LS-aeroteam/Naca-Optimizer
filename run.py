@@ -149,7 +149,7 @@ def main():
     # Run all dependency and environment checks first
     perform_all_checks(require_xfoil=(solver == XFOIL))
 
-    from naca_core.airfoil import NACA4, save_airfoil_coordinates
+    from naca_core.airfoil import get_family, save_airfoil_coordinates
     from naca_core.optimization import print_phase
     from naca_core.export import export_all
     from naca_core.panel_method import run_panel_analysis, surface_distributions
@@ -187,7 +187,10 @@ def main():
     num_panels = inputs['num_panels']
     seed = inputs['seed']
     span = inputs['span']
-    family = NACA4  # airfoil family: parameters, search limits, geometry and name
+    # Airfoil family: parameters, search limits, geometry and name. Chosen only in the input file;
+    # the interactive questions always use NACA 4-digit
+    family_key = inputs.get('airfoil_family', DEFAULTS['airfoil_family'])
+    family = get_family(family_key)
 
     # --- PHASE 1: AIRFOIL OPTIMIZATION ---
     print_phase("PHASE 1: AIRFOIL OPTIMIZATION")
@@ -247,9 +250,12 @@ def main():
     else:
         print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
-    # One Results/ folder for both solvers: Re<Re>_Alpha<alpha>_<objective>_<solver>_seed<N>
+    # One Results/ folder for both solvers: Re<Re>_Alpha<alpha>_<objective>_<solver>[_<family>]_seed<N>
     objective_tag = f"Cl{target_cl}" if target_cl is not None else f"CdMax{max_cd}"
-    results_dir_name = f"Re{int(round(target_reynolds))}_Alpha{target_alpha}_{objective_tag}_{solver}_seed{seed}"
+    # The family is in the name only when it is not NACA 4-digit, so earlier folder names do not change
+    family_tag = "" if family_key == "naca4" else f"_{family_key}"
+    results_dir_name = (f"Re{int(round(target_reynolds))}_Alpha{target_alpha}_{objective_tag}_{solver}"
+                        f"{family_tag}_seed{seed}")
     results_dir = os.path.join(REPO_ROOT, "Results", results_dir_name)
     os.makedirs(results_dir, exist_ok=True)
     print(f"[i] Saving results to 'Results/{results_dir_name}/'")

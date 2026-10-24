@@ -26,7 +26,19 @@ SOLVER = "inhouse"
 
 
 # =============================================================================
-#  2. FLOW CONDITIONS          Reynolds and Mach are computed from these values
+#  2. AIRFOIL FAMILY
+# =============================================================================
+#   "naca4"  NACA 4-digit, e.g. NACA 2412. Parameters: m (max camber), p (its position),
+#            t (thickness). Starts from NACA 2412.
+#   "naca5"  NACA 5-digit, non-reflex mean line, e.g. NACA 23012. Parameters: cl_d (design
+#            lift coefficient), p (position of max camber, 0.05 to 0.25), t. Starts from NACA 23012.
+#   The family can be chosen only here: the questions in the terminal always use "naca4".
+
+AIRFOIL_FAMILY = "naca4"
+
+
+# =============================================================================
+#  3. FLOW CONDITIONS          Reynolds and Mach are computed from these values
 # =============================================================================
 
 FLUID = "air"           # "air"    sea level, nu = 1.46e-5 m^2/s, a = 340.3 m/s
@@ -37,7 +49,7 @@ ALPHA = 4.0             # [deg]  angle of attack
 
 
 # =============================================================================
-#  3. OBJECTIVE
+#  4. OBJECTIVE
 # =============================================================================
 #   OBJECTIVE is used only with SOLVER = "xfoil".
 #   With "inhouse" it is ignored: the in-house solver always reaches TARGET_CL.
@@ -49,7 +61,7 @@ MAX_CD = 0.006          # [-]    maximum drag coefficient  (used by "max_cl")
 
 
 # =============================================================================
-#  4. SEARCH
+#  5. SEARCH
 # =============================================================================
 
 MAX_HEIGHT_BOX = 0.3    # [m]    maximum total height of the airfoil (thickness + camber)
@@ -59,7 +71,7 @@ SEED = None             # [-]    None = random (printed at the end of the run);
 
 
 # =============================================================================
-#  5. EXPORT
+#  6. EXPORT
 # =============================================================================
 
 SPAN = None             # [m]    span of the extruded wing in the STL file; None = same as CHORD

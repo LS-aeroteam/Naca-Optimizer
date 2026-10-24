@@ -1,8 +1,8 @@
 # NACA Optimizer
 
-Find a NACA 4-digit airfoil that gives you the lift you need.
+Find a NACA airfoil that gives you the lift you need.
 
-You tell the program the flow conditions (fluid, speed, chord), the angle of attack and the lift coefficient you want. It searches the NACA 4-digit family for a shape that hits that target, then saves the coordinates, the plots and the raw data.
+You tell the program the flow conditions (fluid, speed, chord), the angle of attack and the lift coefficient you want. It searches an airfoil family (NACA 4-digit by default, or NACA 5-digit) for a shape that hits that target, then saves the coordinates, the plots and the raw data.
 
 The project comes with two solvers that follow the same workflow:
 
@@ -29,7 +29,7 @@ Naca-optimizer/
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
 │   ├── xfoil_optimizer.py          # Connects XFOIL to the search, with the two objectives
 │   ├── optimization.py             # Shared search: Genetic Algorithm + SLSQP, table, box, seed
-│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit)
+│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit, NACA 5-digit)
 │   ├── export.py                   # DXF, CSV, VTK, STL
 │   ├── plotting.py                 # Plots
 │   ├── pre_run_checks.py           # Library and XFOIL checks
@@ -45,7 +45,7 @@ Naca-optimizer/
 │   ├── regression_inputs.py        # Input file of that fixed run
 │   └── stl_export_check.py         # STL export quality
 ├── Results/                        # Created by the scripts, not versioned
-│   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
+│   ├── Re<Re>_Alpha<a>_<objective>_<solver>[_<family>]_seed<N>/   # one folder per optimization run
 │   │   └── export/                 # CAD, ParaView and OpenFOAM files
 │   └── validation/
 │       └── Re<Re>_Mach<M>/         # one folder per validation run
@@ -59,13 +59,28 @@ Naca-optimizer/
 ## How it works
 
 ### 1. Geometry
-Each airfoil is built from three numbers:
+Each airfoil is built from a few numbers, which depend on the airfoil family.
 
-| Parameter | Meaning | Example (NACA 2412) |
-|-----------|---------|---------------------|
-| `m` | maximum camber (fraction of chord) | 0.02 |
-| `p` | position of maximum camber (fraction of chord) | 0.4 |
-| `t` | maximum thickness (fraction of chord) | 0.12 |
+#### Airfoil families
+The family is chosen in the input file (`AIRFOIL_FAMILY`); the questions in the terminal always use NACA 4-digit.
+
+**NACA 4-digit** (`"naca4"`, default). Starts from NACA 2412.
+
+| Parameter | Meaning | Example (NACA 2412) | Search range |
+|-----------|---------|---------------------|--------------|
+| `m` | maximum camber (fraction of chord) | 0.02 | 0 – 0.09 |
+| `p` | position of maximum camber (fraction of chord) | 0.4 | 0.1 – 0.7 |
+| `t` | maximum thickness (fraction of chord) | 0.12 | 0.05 – 0.25 |
+
+**NACA 5-digit** (`"naca5"`), non-reflex mean line (the 210 to 250 series, e.g. NACA 23012). Same thickness as NACA 4-digit; the mean line is a cubic up to x = r and a straight line after it. Starts from NACA 23012.
+
+| Parameter | Meaning | Example (NACA 23012) | Search range |
+|-----------|---------|----------------------|--------------|
+| `cl_d` | design lift coefficient (first digit × 0.15) | 0.3 | 0.05 – 0.6 |
+| `p` | position of maximum camber (second digit ÷ 20) | 0.15 | 0.05 – 0.25 |
+| `t` | maximum thickness (fraction of chord) | 0.12 | 0.05 – 0.25 |
+
+The name is rebuilt from the rounded values: `NACA` + round(cl_d / 0.15) + round(p · 20) + `0` + round(t · 100). The mean-line constants r and k₁ are computed for any p, instead of being read from the five-row table of Abbott & von Doenhoff: r from p = r·(1 − √(r/3)), k₁ = 6·cl_d / Q(r). With the tabulated r they give the tabulated k₁ within 0.03 % for the 230, 240 and 250 mean lines. For 210 and 220 the historical table differs from its own formula (k₁ 361.4 against 351.6 for 210), a difference of about 0.0003 of the chord on the shape.
 
 Points are placed with cosine spacing, so there are more of them near the leading and trailing edge, where the flow changes fastest.
 
@@ -177,7 +192,7 @@ Instead of answering the questions, you can write every input in a file and run:
 python run.py --input inputs.py
 ```
 
-No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in five sections (solver, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
+No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in six sections (solver, airfoil family, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
 
 ```python
 FLUID = "air"           # "air"    sea level, nu = 1.46e-5 m^2/s, a = 340.3 m/s
@@ -190,6 +205,7 @@ ALPHA = 4.0             # [deg]  angle of attack
 | Variable | Same as the prompt | Values |
 |----------|--------------------|--------|
 | `SOLVER` | Solver | `"inhouse"` or `"xfoil"`. `--solver` on the command line replaces it |
+| `AIRFOIL_FAMILY` | — (input file only) | `"naca4"` (default) or `"naca5"`, see [Airfoil families](#airfoil-families). The questions in the terminal always use NACA 4-digit |
 | `FLUID` | Fluid | `"air"` or `"water"` |
 | `SPEED`, `CHORD`, `ALPHA` | Design speed (m/s), chord (m), angle of attack (°) | numbers |
 | `OBJECTIVE` | Objective (XFOIL only) | `"min_cd"` (= 1) or `"max_cl"` (= 2). Ignored with the in-house solver, which always reaches `TARGET_CL` |
@@ -269,7 +285,7 @@ Results/Re<Reynolds>_Alpha<angle>_Cl<target>_<solver>_seed<N>/     (target-Cl ru
 Results/Re<Reynolds>_Alpha<angle>_CdMax<limit>_xfoil_seed<N>/      (XFOIL, maximum-Cl runs)
 ```
 
-`<solver>` is `inhouse` or `xfoil`. For example `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_seed42/`. The same case solved with both solvers ends up in two folders side by side, and runs with different seeds never overwrite each other.
+`<solver>` is `inhouse` or `xfoil`. For example `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_seed42/`. The same case solved with both solvers ends up in two folders side by side, and runs with different seeds never overwrite each other. With an airfoil family other than NACA 4-digit its name comes before the seed, e.g. `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_naca5_seed42/`.
 
 | File | Content |
 |------|---------|
@@ -346,7 +362,8 @@ XFOIL is not part of this test: its output depends on the XFOIL executable and t
 - **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils unless you enter the same seed.
 - **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.
-- **Only NACA 4-digit airfoils.**
+- **Only NACA 4-digit and NACA 5-digit (non-reflex) airfoils.**
+- **Thickness is applied perpendicular to the mean line** (the standard NACA definition). XFOIL's own NACA generator adds it vertically, so its NACA airfoils differ from ours by up to 0.001 (NACA 2412) to 0.003 (NACA 23012) of the chord, near the leading edge.
 - **The export does not mesh or run a CFD case.** It gives geometry and surface data; mesh, boundary conditions and solver setup are up to you.
 
 Open items and planned work are tracked in [TODO.md](TODO.md).
