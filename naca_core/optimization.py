@@ -1,19 +1,16 @@
 """
 Shared optimization logic for both solvers.
 
-Both optimizers use the same search limits, the same two-phase search
-(Genetic Algorithm = scipy differential evolution, then SLSQP), the same
-bounding-box rule and the same terminal table. Each solver only defines how
-an airfoil is analysed and how the score is computed.
+Both optimizers use the same two-phase search (Genetic Algorithm = scipy
+differential evolution, then SLSQP), the same bounding-box rule and the same
+terminal table. Each solver only defines how an airfoil is analysed and how the
+score is computed. The airfoil family (naca_core.airfoil.AirfoilFamily) gives the
+parameters, their search limits, the starting airfoil and the geometry.
 """
 import numpy as np
 from scipy.optimize import minimize, differential_evolution
 
-from .airfoil import naca4_airfoil
-
-# Search limits for [m, p, t] and starting airfoil (NACA 2412), shared by both solvers
-BOUNDS = [(0.0, 0.09), (0.1, 0.7), (0.05, 0.25)]
-INITIAL_GUESS = [0.02, 0.4, 0.12]
+from .airfoil import NACA4
 
 # Score given to failed analyses and to airfoils outside the bounding box. It must be larger
 # than the score of any valid airfoil, including the objective penalties of the XFOIL solver
@@ -21,10 +18,10 @@ INITIAL_GUESS = [0.02, 0.4, 0.12]
 FAILURE_PENALTY = 1e9
 BOX_PENALTY_WEIGHT = 1000.0
 
-# Terminal table: one definition for both solvers
-_TABLE_HEADER = (f"| {'Eval':^4} | {'m':^6} | {'p':^6} | {'t':^6} | {'Cl':^7} | "
-                 f"{'Cd':^7} | {'BB':^4} | {'Score':^11} |")
-_SEPARATOR = "-" * len(_TABLE_HEADER)
+# Terminal table: one definition for both solvers, one column per parameter of the family
+def _table_header(params, width=6):
+    columns = "".join(f"{name:^{width}} | " for name in params)
+    return f"| {'Eval':^4} | {columns}{'Cl':^7} | {'Cd':^7} | {'BB':^4} | {'Score':^11} |"
 
 
 def print_phase(title):
@@ -43,15 +40,20 @@ class BaseNacaOptimizer:
                                              status is a short label ("Failed", "Timeout")
         _score(cl, cd) -> float              score to minimise for a successful analysis
     and set SOLVER_NAME, FD_STEP (finite-difference step used by SLSQP) and NUM_POINTS.
+
+    History rows: [eval, *parameters of the family, Cl, Cd, score].
     """
     SOLVER_NAME = "Solver"
     FD_STEP = 1e-4
     NUM_POINTS = 100  # points per surface used to build the airfoil for the analysis
 
-    def __init__(self, chord=1.0, max_height_box=None, seed=None):
+    def __init__(self, chord=1.0, max_height_box=None, seed=None, family=NACA4):
         self.chord = chord
         self.max_height_box = max_height_box
         self.seed = seed
+        self.family = family
+        # Parameter columns: 6 characters (0.0200), 7 when a parameter can be negative (-0.1504)
+        self.col_width = 7 if any(lo < 0 for lo, _ in family.bounds) else 6
         self.eval_count = 0
         self.history = []
 
@@ -63,40 +65,48 @@ class BaseNacaOptimizer:
         raise NotImplementedError
 
     # --- shared logic ---
-    @staticmethod
-    def _print_row(n, m, p, t, cl, cd, bb, score):
+    def _print_row(self, n, values, cl, cd, bb, score):
         cl_str = cl if isinstance(cl, str) else f"{cl:.4f}"
         cd_str = cd if isinstance(cd, str) else f"{cd:.5f}"
-        print(f"| {n:4d} | {m:6.4f} | {p:6.4f} | {t:6.4f} | {cl_str:>7} | {cd_str:>7} | {bb:^4} | {score:11.4e} |")
+        columns = "".join(f"{v:{self.col_width}.4f} | " for v in values)
+        print(f"| {n:4d} | {columns}{cl_str:>7} | {cd_str:>7} | {bb:^4} | {score:11.4e} |")
 
     def _objective_function(self, params):
         self.eval_count += 1
         # Keep parameters inside the limits (guards against round-off at the bounds)
-        m, p, t = (float(np.clip(v, lo, hi)) for v, (lo, hi) in zip(params, BOUNDS))
+        values = [float(np.clip(v, lo, hi)) for v, (lo, hi) in zip(params, self.family.bounds)]
 
-        X, Y, _ = naca4_airfoil(m, p, t, num_points=self.NUM_POINTS)
+        # Parameters that give no real airfoil (e.g. CST upper surface below the lower one): not analysed
+        shape_error = self.family.shape_error(values)
+        if shape_error:
+            score = self.family.failure_score(values, FAILURE_PENALTY)
+            self._print_row(self.eval_count, values, shape_error, "-", "", score)
+            self.history.append([self.eval_count, *values, shape_error, shape_error, score])
+            return score
+
+        X, Y = self.family.coordinates(values, self.NUM_POINTS)
 
         # Bounding box: geometric check only, the solver is not run if the airfoil is too tall
         if self.max_height_box is not None:
             height = (np.max(Y) - np.min(Y)) * self.chord
             if height > self.max_height_box:
                 score = FAILURE_PENALTY + ((height - self.max_height_box) * BOX_PENALTY_WEIGHT) ** 2
-                self._print_row(self.eval_count, m, p, t, "-", "-", "OUT", score)
-                self.history.append([self.eval_count, m, p, t, "Box Fail", "Box Fail", score])
+                self._print_row(self.eval_count, values, "-", "-", "OUT", score)
+                self.history.append([self.eval_count, *values, "Box Fail", "Box Fail", score])
                 return score
 
         cl, cd, status = self._analyse(X, Y)
 
         if cl is None:
             # Failed analysis: large penalty, slightly smaller for more usual shapes
-            score = FAILURE_PENALTY + (0.12 - t) ** 2 * 1e5 + (0.05 - m) ** 2 * 1e5
-            self._print_row(self.eval_count, m, p, t, status, "-", "", score)
-            self.history.append([self.eval_count, m, p, t, status, status, score])
+            score = self.family.failure_score(values, FAILURE_PENALTY)
+            self._print_row(self.eval_count, values, status, "-", "", score)
+            self.history.append([self.eval_count, *values, status, status, score])
             return score
 
         score = self._score(cl, cd)
-        self._print_row(self.eval_count, m, p, t, cl, "-" if cd is None else cd, "", score)
-        self.history.append([self.eval_count, m, p, t, cl, "" if cd is None else cd, score])
+        self._print_row(self.eval_count, values, cl, "-" if cd is None else cd, "", score)
+        self.history.append([self.eval_count, *values, cl, "" if cd is None else cd, score])
         return score
 
     def optimize(self, max_iter=50):
@@ -106,10 +116,12 @@ class BaseNacaOptimizer:
         Returns:
             scipy.optimize.OptimizeResult: result of the SLSQP phase.
         """
+        header = _table_header(self.family.params, self.col_width)
+        separator = "-" * len(header)
         print(f"[+] Starting Hybrid {self.SOLVER_NAME} Airfoil Optimization...")
-        print(_SEPARATOR)
-        print(_TABLE_HEADER)
-        print(_SEPARATOR)
+        print(separator)
+        print(header)
+        print(separator)
 
         self.eval_count = 0
         self.history = []
@@ -117,11 +129,11 @@ class BaseNacaOptimizer:
         print("\n--> Phase 1: Genetic Algorithm (Global Search)")
         ga_result = differential_evolution(
             self._objective_function,
-            BOUNDS,
+            self.family.bounds,
             maxiter=5,       # short global search: the local phase refines the result
             popsize=5,
             polish=False,    # the local refinement is done below with SLSQP
-            x0=INITIAL_GUESS,
+            x0=self.family.initial_guess,
             rng=np.random.default_rng(self.seed),
         )
 
@@ -130,11 +142,11 @@ class BaseNacaOptimizer:
             self._objective_function,
             ga_result.x,
             method='SLSQP',
-            bounds=BOUNDS,
+            bounds=self.family.bounds,
             options={'disp': False, 'maxiter': max_iter, 'ftol': 1e-4, 'eps': self.FD_STEP}
         )
 
-        print(_SEPARATOR)
+        print(separator)
         return result
 
     def get_optimization_history(self):
