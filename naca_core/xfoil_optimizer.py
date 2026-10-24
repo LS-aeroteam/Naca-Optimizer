@@ -21,8 +21,13 @@ class NacaOptimizer(BaseNacaOptimizer):
     # is below 0.0001 and the finite-difference gradient becomes zero.
     FD_STEP = 2e-3
 
-    # Penalty weights. Scores are in drag counts (1 count = 0.0001 of Cd) for MIN_CD:
-    # 0.001 of Cl outside the tolerance costs 100 counts, far more than any Cd difference.
+    # Penalty weights. Scores are in drag counts (1 count = 0.0001 of Cd) for MIN_CD.
+    # Linear term: its slope is already there at the edge of the tolerance, where the quadratic
+    # term is flat, so leaving the tolerance never pays off: 0.0001 of Cl outside it costs
+    # 100 counts, against about 3 counts of Cd saved (seed 657086: 0.0003 of Cl outside the
+    # tolerance saved 9 counts of Cd, while the quadratic term charged only 9 counts for it).
+    CL_LINEAR_WEIGHT = 1e6
+    # Quadratic term: 0.001 of Cl outside the tolerance costs 100 counts more, growing fast further out.
     CL_PENALTY_WEIGHT = 1e4
     # MAX_CL: 1 count of Cd above the limit costs as much as 1.0 of Cl.
     CD_PENALTY_WEIGHT = 1e4
@@ -65,9 +70,9 @@ class NacaOptimizer(BaseNacaOptimizer):
 
     def _score(self, cl, cd):
         if self.objective == MIN_CD:
-            # Inside the Cl tolerance only Cd counts; outside, a quadratic penalty is added
+            # Inside the Cl tolerance only Cd counts; outside, a linear + quadratic penalty is added
             cl_excess = max(0.0, abs(cl - self.target_cl) - CL_TOLERANCE)
-            return cd * 1e4 + (cl_excess * self.CL_PENALTY_WEIGHT) ** 2
+            return cd * 1e4 + cl_excess * self.CL_LINEAR_WEIGHT + (cl_excess * self.CL_PENALTY_WEIGHT) ** 2
         # MAX_CL: the higher Cl, the lower the score; Cd above the limit is penalised
         cd_excess = max(0.0, cd - self.max_cd)
         return -cl + (cd_excess * self.CD_PENALTY_WEIGHT) ** 2
