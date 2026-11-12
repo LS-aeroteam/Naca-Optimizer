@@ -16,7 +16,7 @@
 - [ ]  **Solver selection from the CLI**: Evaluate adding a command-line option next to the interactive question (e.g. `--solver xfoil`), useful to run several cases automatically.
 - [ ]  **Terminal non-regression test**: Evaluate making the before/after comparison of the terminal output (fixed seed) a permanent test in `tests/`, next to the existing numerical baseline.
 - [ ]  **Cl penalty in objective 1**: With the quadratic penalty, going slightly outside the Cl tolerance costs less than the Cd saved (0.0003 outside the tolerance = 9 drag counts): with seed 657086 the final Cl is 0.7947 instead of 0.8 ± 0.005. Evaluate a linear penalty or a larger weight. It changes the results: to be decided together.
-- [ ]  **XFOIL logging**: `naca_core/xfoil.py` calls `logging.basicConfig(level=INFO)` when the module is loaded, so in XFOIL runs the `[INFO]` messages of ezdxf are shown during the export. Use a module logger without configuring the global one.
+- [x]  **XFOIL logging**: `naca_core/xfoil.py` calls `logging.basicConfig(level=INFO)` when the module is loaded, so in XFOIL runs the `[INFO]` messages of ezdxf are shown during the export. Use a module logger without configuring the global one.
 
 ## Repository Management
 - [ ]  **License**: Choose and apply an open-source license (e.g. MIT or GPL) by adding a `LICENSE` file, to define legally how third parties may use the code.

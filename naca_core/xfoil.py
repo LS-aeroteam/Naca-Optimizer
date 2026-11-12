@@ -4,8 +4,11 @@ import tempfile
 import logging
 from .pre_run_checks import find_xfoil_executable
 
-# Configure basic logging
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+# Module logger: the global logging configuration is left to the application, so importing
+# this module does not change what other libraries (e.g. ezdxf during the export) print.
+# Without a configuration, Python still prints warnings and errors on stderr (message only),
+# so the messages carry the "[!]" prefix used by the rest of the terminal output.
+logger = logging.getLogger(__name__)
 
 class XFoilAnalysis:
     """A wrapper for running an XFOIL analysis."""
@@ -38,7 +41,7 @@ class XFoilAnalysis:
         """
         self.last_error = None
         if not self.xfoil_exe or not os.path.exists(self.xfoil_exe):
-            logging.error(f"XFOIL executable not found at '{self.xfoil_exe}'. Aborting analysis.")
+            logger.error(f"[!] XFOIL executable not found at '{self.xfoil_exe}'. Aborting analysis.")
             return None, None, None
             
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -68,14 +71,14 @@ class XFoilAnalysis:
                         cwd=temp_dir
                     )
             except FileNotFoundError:
-                logging.error(f"XFOIL executable not found at '{self.xfoil_exe}'. Ensure it is in the correct path.")
+                logger.error(f"[!] XFOIL executable not found at '{self.xfoil_exe}'. Ensure it is in the correct path.")
                 return None, None, None
             except subprocess.TimeoutExpired:
                 # Reported by the caller (e.g. "Timeout" in the optimization table)
                 self.last_error = "timeout"
                 return None, None, None
             except Exception as e:
-                logging.error(f"An unexpected error occurred while running XFOIL: {e}")
+                logger.error(f"[!] An unexpected error occurred while running XFOIL: {e}")
                 return None, None, None
 
             # Parse polar results
@@ -138,6 +141,6 @@ class XFoilAnalysis:
                     except (ValueError, IndexError):
                         continue # Skip malformed lines
         except IOError:
-            logging.warning(f"Could not read XFOIL polar file: {polar_file}")
+            logger.warning(f"[!] Could not read XFOIL polar file: {polar_file}")
 
         return cl, cd, achieved_alpha
