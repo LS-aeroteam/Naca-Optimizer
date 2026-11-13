@@ -19,7 +19,7 @@ What every symbol, message and number means, and why each value was chosen, is e
 
 ```
 Naca-optimizer/
-├── run.py                          # Start here: python run.py (you choose the solver)
+├── run.py                          # Start here: python run.py (you choose the solver, or --solver)
 ├── naca_core/                      # All the code
 │   ├── __init__.py
 │   ├── panel_method.py             # In-house solver (source + vortex panel method)
@@ -135,6 +135,15 @@ Select the solver:
 1. In-house panel method (potential flow, fast, no drag)
 2. XFOIL (viscous, slower, gives drag)
 ```
+
+You can skip it by choosing the solver on the command line, which is handy when you launch several cases from a script:
+
+```bash
+python run.py --solver inhouse
+python run.py --solver xfoil
+```
+
+`python run.py --help` lists the options. Without `--solver` the question is asked as above.
 
 Then the setup, the same for both solvers:
 

@@ -2,6 +2,7 @@ import os
 import csv
 import sys
 import random
+import argparse
 
 # Only the standard library is imported here: numpy/scipy/matplotlib are imported
 # inside main(), after perform_all_checks() has verified (or installed) them.
@@ -11,6 +12,15 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 INHOUSE = "inhouse"
 XFOIL = "xfoil"
+
+
+def parse_arguments(argv=None):
+    """Command-line options. Every option is optional: what is not given is asked in the terminal."""
+    parser = argparse.ArgumentParser(
+        description="Find a NACA 4-digit airfoil for the target conditions (in-house panel method or XFOIL).")
+    parser.add_argument("--solver", choices=(INHOUSE, XFOIL),
+                        help="solver to use; if omitted, it is asked in the terminal")
+    return parser.parse_args(argv)
 
 
 def get_solver_selection():
@@ -103,8 +113,14 @@ def get_user_input(solver):
 
 def main():
     """Main execution block for the aerodynamic suite."""
+    args = parse_arguments()
+
     # The solver is chosen first: the XFOIL check below is needed only for XFOIL
-    solver = get_solver_selection()
+    if args.solver:
+        solver = args.solver
+        print(f"[i] Solver: {solver} (from the command line)")
+    else:
+        solver = get_solver_selection()
 
     # Run all dependency and environment checks first
     perform_all_checks(require_xfoil=(solver == XFOIL))
