@@ -7,11 +7,10 @@ import argparse
 # Only the standard library is imported here: numpy/scipy/matplotlib are imported
 # inside main(), after perform_all_checks() has verified (or installed) them.
 from naca_core.pre_run_checks import perform_all_checks
+from naca_core.input_file import (INHOUSE, XFOIL, FLUIDS, DEFAULTS, InputFileError,
+                                  flow_conditions, load_input_file)
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
-
-INHOUSE = "inhouse"
-XFOIL = "xfoil"
 
 
 def parse_arguments(argv=None):
@@ -19,8 +18,23 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(
         description="Find a NACA 4-digit airfoil for the target conditions (in-house panel method or XFOIL).")
     parser.add_argument("--solver", choices=(INHOUSE, XFOIL),
-                        help="solver to use; if omitted, it is asked in the terminal")
+                        help="solver to use; if omitted, it is asked in the terminal "
+                             "(or taken from the input file)")
+    parser.add_argument("--input", metavar="FILE",
+                        help="Python input file (e.g. inputs.py): no questions are asked in the terminal. "
+                             "--solver, if given, replaces the solver of the file")
     return parser.parse_args(argv)
+
+
+def random_seed():
+    """Random seed for a run, printed at the end so the run can be repeated."""
+    return random.SystemRandom().randrange(1, 1_000_000)
+
+
+def print_conditions(reynolds, mach):
+    print(f"\n [i] Calculated Conditions:")
+    print(f"    - Reynolds Number: {reynolds:,.0f}")
+    print(f"    - Mach Number: {mach:.3f}")
 
 
 def get_solver_selection():
@@ -39,10 +53,7 @@ def get_solver_selection():
 
 
 def get_fluid_selection():
-    fluids = {
-        '1': {'name': 'Air (Standard SL)', 'viscosity': 1.46e-5, 'speed_of_sound': 340.3},
-        '2': {'name': 'Water (20 degrees)', 'viscosity': 1.00e-6, 'speed_of_sound': 1482.0}
-    }
+    fluids = {'1': FLUIDS['air'], '2': FLUIDS['water']}
 
     while True:
         print("\nSelect the operating fluid:")
@@ -50,7 +61,7 @@ def get_fluid_selection():
         print("2. Water (Kinematic viscosity: 1.00e-6 m^2/s, Speed of sound: 1482.0 m/s)")
         choice = input("Choice (1 or 2) [default: 1]: ").strip()
         if not choice:
-            return fluids['1']
+            return FLUIDS[DEFAULTS['fluid']]
         if choice in fluids:
             return fluids[choice]
         print("Error: invalid selection.")
@@ -63,20 +74,17 @@ def get_user_input(solver):
     print("======================================================================")
 
     fluid = get_fluid_selection()
-    fluid_viscosity = fluid['viscosity']
-    speed_of_sound = fluid['speed_of_sound']
+    d = DEFAULTS  # Enter = default value, the same used for the keys missing from an input file
 
     try:
-        speed = float(input("Enter design speed (m/s) [e.g., 50]: ") or 50)
-        chord = float(input("Enter airfoil chord (m) [e.g., 1.0]: ") or 1.0)
+        speed = float(input(f"Enter design speed (m/s) [e.g., {d['speed']}]: ") or d['speed'])
+        chord = float(input(f"Enter airfoil chord (m) [e.g., {d['chord']}]: ") or d['chord'])
 
-        target_reynolds = (speed * chord) / fluid_viscosity
-        target_mach = speed / speed_of_sound
-        print(f"\n [i] Calculated Conditions:")
-        print(f"    - Reynolds Number: {target_reynolds:,.0f}")
-        print(f"    - Mach Number: {target_mach:.3f}")
+        target_reynolds, target_mach = flow_conditions(fluid, speed, chord)
+        print_conditions(target_reynolds, target_mach)
 
-        target_alpha = float(input("\nEnter target angle of attack (degrees) [e.g., 4.0]: ") or 4.0)
+        target_alpha = float(input(f"\nEnter target angle of attack (degrees) [e.g., {d['alpha']}]: ")
+                             or d['alpha'])
 
         # The objective can be chosen only with a solver that computes Cd (XFOIL for now)
         objective_choice, target_cl, max_cd = "1", None, None
@@ -88,14 +96,17 @@ def get_user_input(solver):
             if objective_choice not in ("1", "2"):
                 raise ValueError("invalid objective")
         if objective_choice == "1":
-            target_cl = float(input("Enter target lift coefficient (Cl) [e.g., 0.8]: ") or 0.8)
+            target_cl = float(input(f"Enter target lift coefficient (Cl) [e.g., {d['target_cl']}]: ")
+                              or d['target_cl'])
         else:
-            max_cd = float(input("Enter maximum drag coefficient (Cd) [e.g., 0.02]: ") or 0.02)
+            max_cd = float(input(f"Enter maximum drag coefficient (Cd) [e.g., {d['max_cd']}]: ") or d['max_cd'])
 
-        max_height_box = float(input("Enter Bounding Box max height (m) [e.g., 0.3]: ") or 0.3)
-        num_panels = int(input("Enter number of panels (Low=60, Medium=100, High=160) [default: 160]: ") or 160)
+        max_height_box = float(input(f"Enter Bounding Box max height (m) [e.g., {d['max_height_box']}]: ")
+                               or d['max_height_box'])
+        num_panels = int(input(f"Enter number of panels (Low=60, Medium=100, High=160) "
+                               f"[default: {d['num_panels']}]: ") or d['num_panels'])
         seed_text = input("Enter random seed [default: random]: ").strip()
-        seed = int(seed_text) if seed_text else random.SystemRandom().randrange(1, 1_000_000)
+        seed = int(seed_text) if seed_text else random_seed()
         span_text = input(f"Enter span for the 3D export (m) [default: {chord} = chord]: ").strip()
         span = float(span_text) if span_text else chord
 
@@ -115,10 +126,23 @@ def main():
     """Main execution block for the aerodynamic suite."""
     args = parse_arguments()
 
+    # The input file is read and checked first (standard library only): a mistake in the file
+    # stops the run before the environment checks
+    file_inputs = None
+    if args.input:
+        try:
+            file_inputs = load_input_file(args.input, solver=args.solver)
+        except InputFileError as e:
+            print(f"[!] Input file '{args.input}': {e}")
+            sys.exit(1)
+
     # The solver is chosen first: the XFOIL check below is needed only for XFOIL
     if args.solver:
         solver = args.solver
         print(f"[i] Solver: {solver} (from the command line)")
+    elif file_inputs:
+        solver = file_inputs['solver']
+        print(f"[i] Solver: {solver} (from the input file)")
     else:
         solver = get_solver_selection()
 
@@ -139,10 +163,19 @@ def main():
         from naca_core.xfoil_optimizer import MIN_CD, MAX_CL, CL_TOLERANCE
         from naca_core.xfoil import XFoilAnalysis
 
-    # Get aerodynamic targets from the user
-    inputs = get_user_input(solver)
-    if inputs is None:
-        sys.exit(1)
+    # Get aerodynamic targets from the input file or from the user
+    if file_inputs:
+        inputs = file_inputs
+        if inputs['seed'] is None:
+            inputs['seed'] = random_seed()
+        print("\n======================================================================")
+        print(f"                SETUP FROM INPUT FILE: {args.input}")
+        print("======================================================================")
+        print_conditions(inputs['reynolds'], inputs['mach'])
+    else:
+        inputs = get_user_input(solver)
+        if inputs is None:
+            sys.exit(1)
 
     target_reynolds = inputs['reynolds']
     target_mach = inputs['mach']
@@ -205,7 +238,10 @@ def main():
     naca_opt_str = f"{int(round(opt_m*100))}{int(round(opt_p*10))}{int(round(opt_t*100)):02d}"
     print(f"\n[+] OPTIMIZATION COMPLETE in {optimizer.eval_count} iterations. Best profile found: NACA {naca_opt_str}")
     print(f"[i] Exact parameters: m = {opt_m:.4f}, p = {opt_p:.4f}, t = {opt_t:.4f}")
-    print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
+    if file_inputs:
+        print(f"[i] Random seed: {seed} (set SEED = {seed} in the input file to repeat this run)")
+    else:
+        print(f"[i] Random seed: {seed} (enter it at the seed prompt to repeat this run)")
 
     # One Results/ folder for both solvers: Re<Re>_Alpha<alpha>_<objective>_<solver>_seed<N>
     objective_tag = f"Cl{target_cl}" if target_cl is not None else f"CdMax{max_cd}"
