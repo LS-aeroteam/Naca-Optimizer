@@ -1,8 +1,8 @@
 # NACA Optimizer
 
-Find a NACA 4-digit airfoil that gives you the lift you need.
+Find a NACA airfoil that gives you the lift you need.
 
-You tell the program the flow conditions (fluid, speed, chord), the angle of attack and the lift coefficient you want. It searches the NACA 4-digit family for a shape that hits that target, then saves the coordinates, the plots and the raw data.
+You tell the program the flow conditions (fluid, speed, chord), the angle of attack and the lift coefficient you want. It searches an airfoil family (NACA 4-digit by default, NACA 5-digit, or free CST shapes) for a shape that hits that target, then saves the coordinates, the plots and the raw data.
 
 The project comes with two solvers that follow the same workflow:
 
@@ -29,7 +29,7 @@ Naca-optimizer/
 │   ├── inhouse_optimizer.py        # Connects the panel method to the search
 │   ├── xfoil_optimizer.py          # Connects XFOIL to the search, with the two objectives
 │   ├── optimization.py             # Shared search: Genetic Algorithm + SLSQP, table, box, seed
-│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit)
+│   ├── airfoil.py                  # Airfoil geometry and families (NACA 4-digit, NACA 5-digit, CST)
 │   ├── export.py                   # DXF, CSV, VTK, STL
 │   ├── plotting.py                 # Plots
 │   ├── pre_run_checks.py           # Library and XFOIL checks
@@ -45,7 +45,7 @@ Naca-optimizer/
 │   ├── regression_inputs.py        # Input file of that fixed run
 │   └── stl_export_check.py         # STL export quality
 ├── Results/                        # Created by the scripts, not versioned
-│   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
+│   ├── Re<Re>_Alpha<a>_<objective>_<solver>[_<family>]_seed<N>/   # one folder per optimization run
 │   │   └── export/                 # CAD, ParaView and OpenFOAM files
 │   └── validation/
 │       └── Re<Re>_Mach<M>/         # one folder per validation run
@@ -59,13 +59,43 @@ Naca-optimizer/
 ## How it works
 
 ### 1. Geometry
-Each airfoil is built from three numbers:
+Each airfoil is built from a few numbers, which depend on the airfoil family.
 
-| Parameter | Meaning | Example (NACA 2412) |
-|-----------|---------|---------------------|
-| `m` | maximum camber (fraction of chord) | 0.02 |
-| `p` | position of maximum camber (fraction of chord) | 0.4 |
-| `t` | maximum thickness (fraction of chord) | 0.12 |
+#### Airfoil families
+The family is chosen in the input file (`AIRFOIL_FAMILY`); the questions in the terminal always use NACA 4-digit.
+
+**NACA 4-digit** (`"naca4"`, default). Starts from NACA 2412.
+
+| Parameter | Meaning | Example (NACA 2412) | Search range |
+|-----------|---------|---------------------|--------------|
+| `m` | maximum camber (fraction of chord) | 0.02 | 0 – 0.09 |
+| `p` | position of maximum camber (fraction of chord) | 0.4 | 0.1 – 0.7 |
+| `t` | maximum thickness (fraction of chord) | 0.12 | 0.05 – 0.25 |
+
+**NACA 5-digit** (`"naca5"`), non-reflex mean line (the 210 to 250 series, e.g. NACA 23012). Same thickness as NACA 4-digit; the mean line is a cubic up to x = r and a straight line after it. Starts from NACA 23012.
+
+| Parameter | Meaning | Example (NACA 23012) | Search range |
+|-----------|---------|----------------------|--------------|
+| `cl_d` | design lift coefficient (first digit × 0.15) | 0.3 | 0.05 – 0.6 |
+| `p` | position of maximum camber (second digit ÷ 20) | 0.15 | 0.05 – 0.25 |
+| `t` | maximum thickness (fraction of chord) | 0.12 | 0.05 – 0.25 |
+
+The name is rebuilt from the rounded values: `NACA` + round(cl_d / 0.15) + round(p · 20) + `0` + round(t · 100). The mean-line constants r and k₁ are computed for any p, instead of being read from the five-row table of Abbott & von Doenhoff: r from p = r·(1 − √(r/3)), k₁ = 6·cl_d / Q(r). With the tabulated r they give the tabulated k₁ within 0.03 % for the 230, 240 and 250 mean lines. For 210 and 220 the historical table differs from its own formula (k₁ 361.4 against 351.6 for 210), a difference of about 0.0003 of the chord on the shape.
+
+**CST, free shape** (`"cst"`). Upper and lower surface are two independent curves (Kulfan's Class-Shape Transformation):
+
+```
+y(x) = √x · (1 − x) · Σ Aᵢ · Bᵢ(x)
+```
+
+where Bᵢ are the Bernstein polynomials of order `CST_ORDER` (default 3). The factor √x·(1 − x) always gives a round leading edge and a closed trailing edge. Each surface has `CST_ORDER + 1` coefficients: `Au0 … Au3` for the upper surface and `Al0 … Al3` for the lower one (negative for a usual airfoil), so 8 parameters with the default order. There is no NACA name: the airfoil is called `CST-3` and the `.dat` header and the CSV give every coefficient.
+
+- **Starting airfoil:** the CST copy (least-squares fit) of NACA 2412, so the search starts from the same shape as NACA 4-digit.
+- **Search range:** the CST fits of NACA 4-digit airfoils over the whole NACA 4-digit range (m 0 / 0.045 / 0.09, p 0.1 / 0.4 / 0.7, t 0.05 / 0.15 / 0.25), widened by 25 % on each side. NACA shapes that a CST cannot follow (fit further than 0.005 of the chord: high camber very close to the leading edge, which reaches ahead of x = 0) are left out.
+- **Invalid shapes:** with free coefficients the upper surface can go below the lower one. Such a shape is not analysed: `Crossed` appears in the Cl column and it gets the failure penalty. With the default order about 29 % of random shapes in the search range are crossed.
+- **Trailing edge:** as for NACA (see below), the analyses use a small trailing-edge gap (0.0025 of the chord, as NACA 2412, added linearly along the chord) and the exported airfoil is closed.
+- **Accuracy of the NACA copies (order 3):** 0.0002 (NACA 0012) to 0.0017 (NACA 9512) of the chord; higher orders improve it only slightly.
+- **Cost:** 8 parameters instead of 3, so the search takes longer (see [Limitations](#limitations)).
 
 Points are placed with cosine spacing, so there are more of them near the leading and trailing edge, where the flow changes fastest.
 
@@ -76,7 +106,7 @@ Points are placed with cosine spacing, so there are more of them near the leadin
 - **XFOIL:** viscous mode at your Reynolds and Mach number, with free transition (Ncrit = 9). XFOIL analyses the same points as the in-house solver (no re-paneling), so the number of panels you choose applies to both. To help convergence, the angle of attack is reached in 1° steps before the target value.
 
 ### 3. Optimization
-The program changes `m`, `p` and `t` to make a score as small as possible. The score depends on the solver:
+The program changes the parameters of the airfoil family (`m`, `p`, `t` for NACA 4-digit) to make a score as small as possible. The score depends on the solver:
 
 - **In-house** (no drag available): reach the target Cl.
   ```
@@ -90,12 +120,12 @@ A large penalty is added when the solver fails. An airfoil taller than your boun
 
 Both solvers use the same two-phase search:
 
-1. **Genetic Algorithm** (global search, scipy differential evolution): a random population of airfoils, which always includes a NACA 2412, evolves for a few generations.
+1. **Genetic Algorithm** (global search, scipy differential evolution): a random population of airfoils, which always includes the starting airfoil of the family (NACA 2412, NACA 23012, or the CST copy of NACA 2412), evolves for a few generations. The population is 5 airfoils per parameter: 15 for the NACA families, 40 for CST of order 3.
 2. **SLSQP** (local refinement): a gradient-based method starts from the best airfoil of phase 1. The finite-difference step is 1e-4 for the in-house solver and 2e-3 for XFOIL, because XFOIL prints Cl with only 4 decimals.
 
 The random population depends on a seed: the same seed gives exactly the same run.
 
-Search limits: `0 ≤ m ≤ 0.09`, `0.1 ≤ p ≤ 0.7`, `0.05 ≤ t ≤ 0.25`.
+Search limits: see [Airfoil families](#airfoil-families) (NACA 4-digit: `0 ≤ m ≤ 0.09`, `0.1 ≤ p ≤ 0.7`, `0.05 ≤ t ≤ 0.25`).
 
 ---
 
@@ -177,7 +207,7 @@ Instead of answering the questions, you can write every input in a file and run:
 python run.py --input inputs.py
 ```
 
-No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in five sections (solver, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
+No question is asked in the terminal. `inputs.py` in the repository root is a plain Python file, ready to edit: one line per input, grouped in six sections (solver, airfoil family, flow conditions, objective, search, export), each with its unit, allowed values and meaning. The values in it are the defaults of the table above. Copy it to keep several cases (for example `cases/water_6deg.py`) and pass the copy with `--input`.
 
 ```python
 FLUID = "air"           # "air"    sea level, nu = 1.46e-5 m^2/s, a = 340.3 m/s
@@ -190,6 +220,8 @@ ALPHA = 4.0             # [deg]  angle of attack
 | Variable | Same as the prompt | Values |
 |----------|--------------------|--------|
 | `SOLVER` | Solver | `"inhouse"` or `"xfoil"`. `--solver` on the command line replaces it |
+| `AIRFOIL_FAMILY` | — (input file only) | `"naca4"` (default), `"naca5"` or `"cst"`, see [Airfoil families](#airfoil-families). The questions in the terminal always use NACA 4-digit |
+| `CST_ORDER` | — (input file only) | whole number, default 3 (8 parameters); used only with `"cst"` |
 | `FLUID` | Fluid | `"air"` or `"water"` |
 | `SPEED`, `CHORD`, `ALPHA` | Design speed (m/s), chord (m), angle of attack (°) | numbers |
 | `OBJECTIVE` | Objective (XFOIL only) | `"min_cd"` (= 1) or `"max_cl"` (= 2). Ignored with the in-house solver, which always reaches `TARGET_CL` |
@@ -269,7 +301,7 @@ Results/Re<Reynolds>_Alpha<angle>_Cl<target>_<solver>_seed<N>/     (target-Cl ru
 Results/Re<Reynolds>_Alpha<angle>_CdMax<limit>_xfoil_seed<N>/      (XFOIL, maximum-Cl runs)
 ```
 
-`<solver>` is `inhouse` or `xfoil`. For example `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_seed42/`. The same case solved with both solvers ends up in two folders side by side, and runs with different seeds never overwrite each other.
+`<solver>` is `inhouse` or `xfoil`. For example `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_seed42/`. The same case solved with both solvers ends up in two folders side by side, and runs with different seeds never overwrite each other. With an airfoil family other than NACA 4-digit its name comes before the seed, e.g. `Results/Re3424658_Alpha4.0_Cl0.8_xfoil_naca5_seed42/`.
 
 | File | Content |
 |------|---------|
@@ -346,7 +378,10 @@ XFOIL is not part of this test: its output depends on the XFOIL executable and t
 - **Many shapes give the same Cl.** The in-house search only matches the target Cl (plus the bounding box), so the airfoil it returns is one valid answer among many. The global search is random, so two runs can return different airfoils unless you enter the same seed.
 - **The NACA name is rounded.** The optimizer works with continuous values (for example `m = 0.0190`, `p = 0.529`, `t = 0.1975` is saved as "NACA 2520"). The saved geometry uses the exact values, which are printed at the end of the run and written in the `.dat` header and in the CSV.
 - **XFOIL does not always converge.** Airfoils where it fails get a large penalty and the search moves on.
-- **Only NACA 4-digit airfoils.**
+- **Three airfoil families:** NACA 4-digit, NACA 5-digit (non-reflex) and CST. Reflex NACA 5-digit mean lines are not included.
+- **CST is slow with XFOIL and the search is short for it.** With the default inputs (160 panels, seed 5) a CST run took 8 s with the in-house solver and about 10.5 minutes with XFOIL (249 evaluations, 46 crossed shapes, 34 XFOIL failures), against about 1 minute for NACA. With the same short search as NACA (5 generations), that XFOIL run ended at Cd 0.00636 for Cl 0.804, not better than a NACA 5-digit run with the same seed (Cd 0.00559, with 60 panels): more freedom of shape needs a longer search to pay off.
+- **XFOIL can still jump on CST shapes.** With the open trailing edge a fine sweep of one coefficient gave one isolated outlier in 22 points (with a closed trailing edge the whole sweep was noisy).
+- **Thickness is applied perpendicular to the mean line** (the standard NACA definition). XFOIL's own NACA generator adds it vertically, so its NACA airfoils differ from ours by up to 0.001 (NACA 2412) to 0.003 (NACA 23012) of the chord, near the leading edge.
 - **The export does not mesh or run a CFD case.** It gives geometry and surface data; mesh, boundary conditions and solver setup are up to you.
 
 Open items and planned work are tracked in [TODO.md](TODO.md).
@@ -408,6 +443,7 @@ Special values in the Cl column:
 | `Failed` | The analysis did not give a valid result. For XFOIL this includes "did not converge at the target angle" |
 | `Timeout` | XFOIL took more than 30 s and was stopped |
 | `-` | Not analysed (airfoil outside the bounding box) |
+| `Crossed` | CST only: the upper surface goes below the lower one, so the shape is not analysed |
 
 ### Score
 

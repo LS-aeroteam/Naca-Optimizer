@@ -19,8 +19,8 @@ FAILURE_PENALTY = 1e9
 BOX_PENALTY_WEIGHT = 1000.0
 
 # Terminal table: one definition for both solvers, one column per parameter of the family
-def _table_header(params):
-    columns = "".join(f"{name:^6} | " for name in params)
+def _table_header(params, width=6):
+    columns = "".join(f"{name:^{width}} | " for name in params)
     return f"| {'Eval':^4} | {columns}{'Cl':^7} | {'Cd':^7} | {'BB':^4} | {'Score':^11} |"
 
 
@@ -52,6 +52,8 @@ class BaseNacaOptimizer:
         self.max_height_box = max_height_box
         self.seed = seed
         self.family = family
+        # Parameter columns: 6 characters (0.0200), 7 when a parameter can be negative (-0.1504)
+        self.col_width = 7 if any(lo < 0 for lo, _ in family.bounds) else 6
         self.eval_count = 0
         self.history = []
 
@@ -63,17 +65,24 @@ class BaseNacaOptimizer:
         raise NotImplementedError
 
     # --- shared logic ---
-    @staticmethod
-    def _print_row(n, values, cl, cd, bb, score):
+    def _print_row(self, n, values, cl, cd, bb, score):
         cl_str = cl if isinstance(cl, str) else f"{cl:.4f}"
         cd_str = cd if isinstance(cd, str) else f"{cd:.5f}"
-        columns = "".join(f"{v:6.4f} | " for v in values)
+        columns = "".join(f"{v:{self.col_width}.4f} | " for v in values)
         print(f"| {n:4d} | {columns}{cl_str:>7} | {cd_str:>7} | {bb:^4} | {score:11.4e} |")
 
     def _objective_function(self, params):
         self.eval_count += 1
         # Keep parameters inside the limits (guards against round-off at the bounds)
         values = [float(np.clip(v, lo, hi)) for v, (lo, hi) in zip(params, self.family.bounds)]
+
+        # Parameters that give no real airfoil (e.g. CST upper surface below the lower one): not analysed
+        shape_error = self.family.shape_error(values)
+        if shape_error:
+            score = self.family.failure_score(values, FAILURE_PENALTY)
+            self._print_row(self.eval_count, values, shape_error, "-", "", score)
+            self.history.append([self.eval_count, *values, shape_error, shape_error, score])
+            return score
 
         X, Y = self.family.coordinates(values, self.NUM_POINTS)
 
@@ -107,7 +116,7 @@ class BaseNacaOptimizer:
         Returns:
             scipy.optimize.OptimizeResult: result of the SLSQP phase.
         """
-        header = _table_header(self.family.params)
+        header = _table_header(self.family.params, self.col_width)
         separator = "-" * len(header)
         print(f"[+] Starting Hybrid {self.SOLVER_NAME} Airfoil Optimization...")
         print(separator)
