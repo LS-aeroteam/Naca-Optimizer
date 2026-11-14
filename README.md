@@ -37,9 +37,13 @@ Naca-optimizer/
 ├── validation_inhouse_vs_xfoil/    # In-house vs XFOIL comparison
 │   ├── run_validation.py
 │   └── README.md
-├── tests/                          # Numerical baseline check
-│   ├── baseline_check.py
-│   └── baseline_reference.json
+├── tests/                          # Checks to run after a change (see "Checking your changes")
+│   ├── baseline_check.py           # Numerical baseline: geometry + panel method
+│   ├── baseline_reference.json
+│   ├── terminal_regression_check.py # Whole terminal output of a fixed in-house run
+│   ├── terminal_regression_reference.txt
+│   ├── regression_inputs.py        # Input file of that fixed run
+│   └── stl_export_check.py         # STL export quality
 ├── Results/                        # Created by the scripts, not versioned
 │   ├── Re<Re>_Alpha<a>_<objective>_<solver>_seed<N>/   # one folder per optimization run
 │   │   └── export/                 # CAD, ParaView and OpenFOAM files
@@ -319,6 +323,16 @@ python tests/baseline_check.py
 ```
 
 It compares Cl and the full Cp distribution of NACA 0012, 2412 and 4412 at three angles of attack with a saved reference. If everything matches it ends with `All 24 quantities match the baseline`. If a change in results is intended, delete `tests/baseline_reference.json` and create a new one with `python tests/baseline_check.py --generate`.
+
+If you touch anything that the optimization or the terminal output depends on (search, scores, messages, inputs, export), also run:
+
+```bash
+python tests/terminal_regression_check.py
+```
+
+It runs `python run.py --input tests/regression_inputs.py` (in-house solver, default conditions, seed 2412, about 5 s) and compares the whole terminal output, line by line, with `tests/terminal_regression_reference.txt`: every evaluated airfoil with its Cl and score, the final airfoil, the messages and the export summary. The repository path is replaced by `<repo>` and `\` by `/`, so the reference is the same on every computer. If everything matches it ends with `Terminal output identical to the reference`; otherwise it prints the lines that changed. If the change is intended, delete the reference and create a new one with `python tests/terminal_regression_check.py --generate`. Like any run, it writes `Results/Re3424658_Alpha4.0_Cl0.8_inhouse_seed2412/`.
+
+XFOIL is not part of this test: its output depends on the XFOIL executable and the platform. A different numpy version could, in rare cases, change the last printed digit of a value: if only such digits differ, check that the change comes from the environment and not from the code, then regenerate the reference.
 
 ---
 
