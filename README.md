@@ -412,7 +412,7 @@ Special values in the Cl column:
 | Solver / objective | Score | Unit |
 |--------------------|-------|------|
 | In-house | (10 · (Cl − Cl_target))² | none |
-| XFOIL, minimum Cd | Cd · 10⁴ + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
+| XFOIL, minimum Cd | Cd · 10⁴ + 10⁶ · Cl excess + (10⁴ · Cl excess)², where Cl excess = how far Cl is outside `target ± 0.005` | drag counts |
 | XFOIL, maximum Cl | −Cl + (10⁴ · Cd excess)², where Cd excess = how far Cd is above the limit | none (negative is normal) |
 | Failed or timeout | 10⁹ + a small term that is lower for airfoils closer to t = 0.12 and m = 0.05 | none |
 | Outside the box | 10⁹ + ((height − box) · 1000)² | none |
@@ -456,7 +456,8 @@ Special values in the Cl column:
 | Small term towards t = 0.12, m = 0.05 | Failed airfoils | From the original code: among failed airfoils it prefers usual shapes, so the search moves back towards shapes that converge |
 | (excess · 1000)² | Out-of-box penalty | Grows with the excess height, so the search knows which way to go back |
 | ± 0.005 | Cl tolerance, minimum-Cd objective | 0.6% of a Cl of 0.8: well above XFOIL's resolution (0.0001) and small enough to keep the target meaningful. An exact Cl would be impossible to hit numerically |
-| 10⁴ | Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts. Near the target, candidate airfoils differ by about 20 counts in our runs, so going outside the tolerance never pays off |
+| 10⁶ | Linear Cl penalty weight, minimum-Cd objective | 0.0001 of Cl outside the tolerance costs 100 drag counts, from the very edge of the tolerance. With the quadratic term alone the penalty is flat at the edge, so going slightly outside paid off: with seed 657086 the final Cl was 0.7947 (0.0003 outside = 9 counts of penalty) for about 9 counts of Cd saved. With the linear term the same run ends at Cl 0.7989. Over six seeds (657086, 1, 2, 3, 42, 2412) it changes only that run: the other five give the same airfoil as before |
+| 10⁴ | Quadratic Cl penalty weight, minimum-Cd objective | 0.001 of Cl outside the tolerance costs 100 drag counts more, and the penalty grows fast further out |
 | 10⁴ | Cd penalty weight, maximum-Cl objective | 1 drag count above the limit costs as much as 1.0 of Cl |
 | Cd 0.02 | Default limit, maximum-Cl objective | From the old "maximum tolerable Cd" prompt. At 4° it is too loose to matter (the best airfoil had Cd ≈ 0.007): still to be decided |
 | Ncrit = 9 | XFOIL | XFOIL's default, the usual value for an average wind tunnel |
