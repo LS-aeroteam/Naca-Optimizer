@@ -1,3 +1,4 @@
+from .airfoil import NACA4
 from .optimization import BaseNacaOptimizer
 from .xfoil import XFoilAnalysis
 
@@ -12,7 +13,7 @@ CL_TOLERANCE = 0.005
 
 class NacaOptimizer(BaseNacaOptimizer):
     """
-    Optimizes a NACA 4-digit airfoil with XFOIL (viscous) for one of two objectives:
+    Optimizes an airfoil of the given family (default NACA 4-digit) with XFOIL (viscous) for one of two objectives:
         MIN_CD: minimum Cd with Cl inside target_cl +/- CL_TOLERANCE
         MAX_CL: maximum Cl with Cd not above max_cd
     """
@@ -36,8 +37,8 @@ class NacaOptimizer(BaseNacaOptimizer):
     CD_PENALTY_WEIGHT = 1e4
 
     def __init__(self, reynolds, alpha, objective=MIN_CD, target_cl=None, max_cd=None, mach=0.0, ncrit=9.0,
-                 chord=1.0, max_height_box=None, num_panels=160, seed=None):
-        super().__init__(chord=chord, max_height_box=max_height_box, seed=seed)
+                 chord=1.0, max_height_box=None, num_panels=160, seed=None, family=NACA4):
+        super().__init__(chord=chord, max_height_box=max_height_box, seed=seed, family=family)
         if objective == MIN_CD and target_cl is None:
             raise ValueError("MIN_CD objective needs target_cl")
         if objective == MAX_CL and max_cd is None:

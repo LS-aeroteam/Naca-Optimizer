@@ -1,10 +1,12 @@
+from .airfoil import NACA4
 from .optimization import BaseNacaOptimizer
 from .panel_method import run_panel_analysis
 
 
 class NacaOptimizer(BaseNacaOptimizer):
     """
-    Finds a NACA 4-digit airfoil that reaches the target Cl with the in-house panel method.
+    Finds an airfoil of the given family (default NACA 4-digit) that reaches the target Cl
+    with the in-house panel method.
     Potential flow: Cd is not available.
     """
     SOLVER_NAME = "Panel-Method"
@@ -12,8 +14,9 @@ class NacaOptimizer(BaseNacaOptimizer):
 
     CL_ERROR_WEIGHT = 10.0
 
-    def __init__(self, reynolds, alpha, target_cl, max_height_box=0.3, chord=1.0, num_panels=160, seed=None):
-        super().__init__(chord=chord, max_height_box=max_height_box, seed=seed)
+    def __init__(self, reynolds, alpha, target_cl, max_height_box=0.3, chord=1.0, num_panels=160, seed=None,
+                 family=NACA4):
+        super().__init__(chord=chord, max_height_box=max_height_box, seed=seed, family=family)
         self.reynolds = reynolds
         self.alpha = alpha
         self.target_cl = target_cl

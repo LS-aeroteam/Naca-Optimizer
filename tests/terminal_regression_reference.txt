@@ -157,8 +157,8 @@ Cd:               not available (potential flow)
 
 
 [+] Exporting files for CAD, ParaView and OpenFOAM...
-      STL section: 26 of 399 points removed (edges < 1.5 mm), max deviation 0.0623 mm
-      STL mesh: 39821 vertices, 79638 triangles, 100 span elements, min angle 8.6 deg
+      STL section: 26 of 398 points removed (edges < 1.5 mm), max deviation 0.0623 mm
+      STL mesh: 39640 vertices, 79276 triangles, 100 span elements, min angle 8.6 deg
     - CAD (mm):        airfoil_NACA_2608.dxf, airfoil_NACA_2608_mm.csv
     - ParaView (m):    airfoil_NACA_2608_surface.vtk
     - OpenFOAM/3D (m): airfoil_NACA_2608_wing.stl (span 1.0 m)

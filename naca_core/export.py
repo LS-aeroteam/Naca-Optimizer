@@ -2,15 +2,16 @@
 Export of the final airfoil for CAD, ParaView and OpenFOAM.
 
 Files written in <results>/export/:
-    <name>_mm.csv        x, y, z points in mm (z = 0), no header. Points only: the trailing edge is left open
-    <name>.dxf           2D profile in mm, closed: spline through the points + trailing-edge line
+    <name>_mm.csv        x, y, z points in mm (z = 0), no header. The first and last point are the trailing edge
+    <name>.dxf           2D profile in mm, closed: spline through the points (from and back to the trailing edge)
     <name>_surface.vtk   ParaView: airfoil contour in m with Cp and V/Vinf (in-house panel method)
     <name>_wing.stl      airfoil extruded along z (m), closed binary STL meshed for surface remeshing:
                          Fluent Meshing, snappyHexMesh, CAD, ParaView
 
 CSV, DXF and VTK use the same points as the .dat file, scaled by the chord. The STL removes section
 points that are too close (cosine spacing clusters them at the trailing edge) within a set deviation.
-The trailing-edge gap of the NACA formula is closed with a straight segment (DXF) or flat faces (STL).
+The airfoils have a closed (sharp) trailing edge; a contour with a gap at the trailing edge would be
+closed with a straight segment (DXF) or flat faces (STL).
 """
 import os
 
@@ -35,7 +36,8 @@ def write_csv_mm(X, Y, chord, path):
 def write_dxf_mm(X, Y, chord, path):
     """
     Closed 2D profile in mm: one spline through all points (control-vertex form, readable by
-    most CAD programs) plus a straight line that closes the trailing edge.
+    most CAD programs). With a closed trailing edge the spline starts and ends at the same point;
+    if the contour has a gap there, a straight line closes it.
     """
     import ezdxf
 
@@ -46,7 +48,8 @@ def write_dxf_mm(X, Y, chord, path):
     msp = doc.modelspace()
     doc.layers.add("AIRFOIL")
     msp.add_cad_spline_control_frame(pts, dxfattribs={"layer": "AIRFOIL"})
-    msp.add_line(pts[-1], pts[0], dxfattribs={"layer": "AIRFOIL"})  # trailing-edge closure
+    if pts[-1] != pts[0]:
+        msp.add_line(pts[-1], pts[0], dxfattribs={"layer": "AIRFOIL"})  # trailing-edge gap closure
     doc.saveas(path)
 
 

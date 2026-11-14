@@ -81,38 +81,38 @@ def plot_lift_distribution(panel_results, alpha_deg, naca_name="", **kwargs):
         plt.savefig(kwargs['save_path'], format='svg', bbox_inches='tight')
     plt.close()
 
-def plot_optimization_history(history, **kwargs):
+def plot_optimization_history(history, family, **kwargs):
     """
     Plots the evolution of parameters and score during optimization.
 
     Args:
         history (list): A list of lists, where each inner list contains
-                        [eval_count, m, p, t, cl, cd, score].
+                        [eval_count, *parameters, cl, cd, score].
+        family (AirfoilFamily): Airfoil family of the run (parameter names and descriptions).
     """
     if not history:
         print("History is empty, cannot generate plot.")
         return
 
     # Keep only successful evaluations (numeric Cl) and the numeric columns used here:
-    # Eval, m, p, t, Score (Cd can be empty for the in-house solver)
-    history_np = np.array([[row[0], row[1], row[2], row[3], row[6]]
-                           for row in history if isinstance(row[4], (int, float))], dtype=float)
+    # Eval, parameters, Score (Cd can be empty for the in-house solver)
+    n_params = len(family.params)
+    history_np = np.array([[row[0], *row[1:1 + n_params], row[-1]]
+                           for row in history if isinstance(row[-3], (int, float))], dtype=float)
     if history_np.shape[0] == 0:
         print("No successful evaluations in history, cannot generate plot.")
         return
-        
+
     eval_count = history_np[:, 0]
-    m = history_np[:, 1]
-    p = history_np[:, 2]
-    t = history_np[:, 3]
-    scores = history_np[:, 4]
+    scores = history_np[:, -1]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 
-    # Plot 1: Parameters m, p, t
-    ax1.plot(eval_count, m, 'r-o', markersize=3, label='m (Max Camber)')
-    ax1.plot(eval_count, p, 'g-o', markersize=3, label='p (Camber Position)')
-    ax1.plot(eval_count, t, 'b-o', markersize=3, label='t (Thickness)')
+    # Plot 1: Parameters of the family
+    styles = ['r-o', 'g-o', 'b-o', 'm-o', 'c-o', 'y-o', 'k-o']
+    for i, (name, description) in enumerate(zip(family.params, family.descriptions)):
+        ax1.plot(eval_count, history_np[:, 1 + i], styles[i % len(styles)], markersize=3,
+                 label=f'{name} ({description})')
     ax1.set_ylabel('Parameter Value')
     ax1.set_title('Optimization History: Parameters & Score', fontsize=16)
     ax1.grid(True)
